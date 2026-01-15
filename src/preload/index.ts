@@ -117,6 +117,16 @@ contextBridge.exposeInMainWorld('carplay', api)
 type UpdateEvent = { phase: string; message?: string }
 type UpdateProgress = { phase?: string; percent?: number; received?: number; total?: number }
 
+const naviWindowApi = {
+  open: (): Promise<void> => ipcRenderer.invoke('navi:open'),
+  close: (): Promise<void> => ipcRenderer.invoke('navi:close'),
+  hide: (): Promise<void> => ipcRenderer.invoke('navi:hide'),
+  resize: (width: number, height: number): Promise<void> => ipcRenderer.invoke('navi:resize', width, height),
+  isVisible: (): Promise<boolean> => ipcRenderer.invoke('navi:isVisible')
+}
+
+contextBridge.exposeInMainWorld('naviWindow', naviWindowApi)
+
 const appApi = {
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
   getLatestRelease: (): Promise<{ version?: string; url?: string }> =>

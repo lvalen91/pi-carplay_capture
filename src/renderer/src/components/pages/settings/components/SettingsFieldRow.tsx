@@ -3,7 +3,6 @@ import { StackItem } from './stackItem'
 import { SettingsItemRow } from './settingsItemRow'
 import { SettingsFieldControl } from './SettingsFieldControl'
 import { SettingsNode } from '../../../../routes'
-import { getValueByPath } from '../utils'
 import { ExtraConfig } from '../../../../../../main/Globals'
 
 type Props<T, K> = {
@@ -14,14 +13,20 @@ type Props<T, K> = {
   onClick?: () => void
 }
 
-export const SettingsFieldRow = <T, K>({ node, value, state, onChange, onClick }: Props<T, K>) => {
+export const SettingsFieldRow = <T, K extends Record<string, unknown>>({
+  node,
+  value,
+  state,
+  onChange,
+  onClick
+}: Props<T, K>) => {
   if (onClick) {
     return (
       <StackItem
         withForwardIcon
         onClick={onClick}
         node={node}
-        value={getValueByPath(state, node.path)}
+        value={state[node.path] as string | undefined}
         showValue={node.displayValue}
       >
         <Typography>{node.label}</Typography>

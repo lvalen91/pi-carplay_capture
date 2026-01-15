@@ -9,7 +9,7 @@ import {
   promises as fsp
 } from 'fs'
 import { electronApp, is } from '@electron-toolkit/utils'
-import { DEFAULT_CONFIG } from './carplay/driver/DongleDriver'
+import { DEFAULT_CONFIG, usbLogger } from './carplay/driver/DongleDriver'
 import { ICON_120_B64, ICON_180_B64, ICON_256_B64 } from './carplay/assets/carIcons'
 import { Socket } from './Socket'
 import { ExtraConfig, DEFAULT_BINDINGS } from './Globals'
@@ -103,6 +103,7 @@ function applyAspectRatioFullscreen(win: BrowserWindow, width: number, height: n
 
 // Globals
 let mainWindow: BrowserWindow | null
+let naviWindow: BrowserWindow | null = null
 let socket: Socket
 let config: ExtraConfig
 let usbService: USBService
@@ -272,7 +273,12 @@ function loadConfig(): ExtraConfig {
     callVolume: 1.0,
     visualAudioDelayMs: 120,
     ...fileConfig,
-    bindings: { ...DEFAULT_BINDINGS, ...(fileConfig.bindings || {}) }
+    bindings: { ...DEFAULT_BINDINGS, ...(fileConfig.bindings || {}) },
+    // Deep merge naviScreen with defaults
+    naviScreen: {
+      ...DEFAULT_CONFIG.naviScreen,
+      ...((fileConfig as any).naviScreen || {})
+    }
   } as ExtraConfig
 
   if (!merged.dongleIcon120) merged.dongleIcon120 = ICON_120_B64
@@ -700,9 +706,117 @@ function createWindow(): void {
   }
 }
 
+function createNaviWindow(show = false): void {
+  if (naviWindow && !naviWindow.isDestroyed()) {
+    if (show) naviWindow.show()
+    return
+  }
+
+  // Get navi screen config from config or use defaults
+  const naviConfig = config.naviScreen || { width: 480, height: 272 }
+
+  naviWindow = new BrowserWindow({
+    width: naviConfig.width || 480,
+    height: naviConfig.height || 272,
+    title: 'Navigation Video',
+    frame: true,
+    resizable: true,
+    alwaysOnTop: false,
+    show: false, // Start hidden, show when video arrives
+    backgroundColor: '#000',
+    webPreferences: {
+      preload: join(__dirname, '../preload/navi.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: true,
+      experimentalFeatures: true
+    }
+  })
+
+  naviWindow.once('ready-to-show', () => {
+    if (!naviWindow) return
+    carplayService.attachNaviRenderer(naviWindow.webContents)
+    if (show) naviWindow.show()
+  })
+
+  naviWindow.on('closed', () => {
+    carplayService.detachNaviRenderer()
+    naviWindow = null
+  })
+
+  // Load the navi video page
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    naviWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/navi`)
+  } else {
+    naviWindow.loadURL('app://index.html#/navi')
+  }
+}
+
+function showNaviWindow(): void {
+  if (naviWindow && !naviWindow.isDestroyed()) {
+    if (!naviWindow.isVisible()) naviWindow.show()
+  } else {
+    createNaviWindow(true)
+  }
+}
+
+function hideNaviWindow(): void {
+  if (naviWindow && !naviWindow.isDestroyed() && naviWindow.isVisible()) {
+    naviWindow.hide()
+  }
+}
+
+function resizeNaviWindow(width: number, height: number): void {
+  if (!naviWindow || naviWindow.isDestroyed()) return
+  if (width > 0 && height > 0) {
+    naviWindow.setContentSize(width, height)
+    // Set aspect ratio to match video
+    const ratio = width / height
+    naviWindow.setAspectRatio(ratio)
+  }
+}
+
 // App lifecycle
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron.carplay')
+
+  // Enable USB packet logging via environment variable
+  // Usage: USB_LOG=1 npm run dev         (control only, no audio/video)
+  //        USB_LOG=combine npm run dev   (control only, single .bin/.json/.log - carlink_native compatible)
+  //        USB_LOG=mic npm run dev       (control + microphone)
+  //        USB_LOG=speaker npm run dev   (control + speaker audio)
+  //        USB_LOG=audio npm run dev     (control + mic + speaker)
+  //        USB_LOG=video npm run dev     (control + video)
+  //        USB_LOG=all npm run dev       (everything + separate stream files)
+  //
+  // Add USB_LOG_SEPARATE=1 to write separate files per stream type
+  // Files: -video.bin, -audio-in.bin, -audio-out.bin, -control.bin
+  const usbLogEnv = process.env.USB_LOG?.toLowerCase()
+  if (usbLogEnv) {
+    const isCombineOnly = usbLogEnv === 'combine'
+    const includeAll = usbLogEnv === 'all' || isCombineOnly
+    const includeVideo = includeAll || usbLogEnv === 'video'
+    const includeMic = includeAll || usbLogEnv === 'mic' || usbLogEnv === 'audio'
+    const includeSpeaker = includeAll || usbLogEnv === 'speaker' || usbLogEnv === 'audio'
+    const separateStreams = !isCombineOnly && (process.env.USB_LOG_SEPARATE === '1' || includeAll)
+
+    usbLogger.enable({
+      logToConsole: true,
+      logToFile: true,
+      logToBinary: true,
+      separateStreams,
+      includeVideoData: includeVideo,
+      includeMicData: includeMic,
+      includeSpeakerData: includeSpeaker,
+      includeControlData: true,
+      maxPayloadHexBytes: 256
+    })
+
+    console.log(`[USBLogger] Capture mode: ${usbLogEnv}`)
+    console.log(`[USBLogger] Video: ${includeVideo}, Mic: ${includeMic}, Speaker: ${includeSpeaker}`)
+    console.log(`[USBLogger] Separate streams: ${separateStreams}`)
+  }
 
   protocol.registerStreamProtocol('app', (request, cb) => {
     try {
@@ -757,6 +871,25 @@ app.whenReady().then(() => {
 
   ipcMain.handle('settings:get-kiosk', () => currentKiosk())
   ipcMain.handle('getSettings', () => config)
+
+  // Navigation video window
+  ipcMain.handle('navi:open', () => {
+    showNaviWindow()
+  })
+  ipcMain.handle('navi:close', () => {
+    if (naviWindow && !naviWindow.isDestroyed()) {
+      naviWindow.close()
+    }
+  })
+  ipcMain.handle('navi:hide', () => {
+    hideNaviWindow()
+  })
+  ipcMain.handle('navi:resize', (_evt, width: number, height: number) => {
+    resizeNaviWindow(width, height)
+  })
+  ipcMain.handle('navi:isVisible', () => {
+    return naviWindow && !naviWindow.isDestroyed() && naviWindow.isVisible()
+  })
   ipcMain.handle('save-settings', (_evt, settings: Partial<ExtraConfig>) => {
     saveSettings(settings)
     return true
@@ -779,6 +912,42 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  // USB Packet Logging IPC handlers
+  ipcMain.handle('usb-log:enable', (_evt, options?: {
+    includeVideoData?: boolean
+    includeMicData?: boolean      // Outgoing microphone audio
+    includeSpeakerData?: boolean  // Incoming speaker audio
+    includeAudioData?: boolean    // Shorthand for both mic + speaker
+    separateStreams?: boolean     // Write separate files per stream type
+    maxPayloadHexBytes?: number
+  }) => {
+    usbLogger.enable({
+      logToConsole: true,
+      logToFile: true,
+      logToBinary: true,
+      separateStreams: true,
+      ...options
+    })
+    return { enabled: true, message: 'USB packet logging enabled', files: usbLogger.getSessionFiles() }
+  })
+
+  ipcMain.handle('usb-log:disable', () => {
+    usbLogger.disable()
+    return { enabled: false, message: 'USB packet logging disabled' }
+  })
+
+  ipcMain.handle('usb-log:status', () => {
+    return {
+      enabled: usbLogger.isEnabled(),
+      stats: usbLogger.getStats()
+    }
+  })
+
+  ipcMain.handle('usb-log:marker', (_evt, message: string) => {
+    usbLogger.logMarker(message)
+    return { success: true }
+  })
 
   ipcMain.handle('app:getLatestRelease', async () => {
     try {
@@ -883,6 +1052,40 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // Pre-create navi window (hidden) so it's ready when video arrives
+  if (config.naviScreen?.enabled !== false) {
+    createNaviWindow(false)
+  }
+
+  // Register callbacks for navi video start/stop
+  carplayService.setNaviVideoCallbacks(
+    (width, height) => {
+      // Auto-show and resize navi window when video starts
+      if (naviWindow && !naviWindow.isDestroyed()) {
+        naviWindow.setContentSize(width, height)
+        naviWindow.setAspectRatio(width / height)
+        if (!naviWindow.isVisible()) {
+          naviWindow.show()
+        }
+      } else {
+        // Window was closed, re-create and show it
+        createNaviWindow(true)
+        // Resize after it's ready
+        setTimeout(() => {
+          if (naviWindow && !naviWindow.isDestroyed()) {
+            naviWindow.setContentSize(width, height)
+            naviWindow.setAspectRatio(width / height)
+          }
+        }, 100)
+      }
+    },
+    () => {
+      // Auto-hide navi window when video stops
+      hideNaviWindow()
+    }
+  )
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0 && !mainWindow) createWindow()
     else mainWindow?.show()
@@ -910,6 +1113,12 @@ function saveSettings(next: Partial<ExtraConfig>) {
       ...DEFAULT_BINDINGS,
       ...(config.bindings ?? {}),
       ...(next.bindings ?? {})
+    },
+    // Deep merge naviScreen
+    naviScreen: {
+      ...DEFAULT_CONFIG.naviScreen,
+      ...(config.naviScreen ?? {}),
+      ...((next as any).naviScreen ?? {})
     }
   } as ExtraConfig
 

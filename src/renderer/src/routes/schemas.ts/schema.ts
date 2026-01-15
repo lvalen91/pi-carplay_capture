@@ -2,6 +2,7 @@ import { generateRoutes } from '../../utils/generateRoutes'
 import { generalSchema } from './generalSchema'
 import { audioSchema } from './audioSchema'
 import { videoSchema } from './videoSchema'
+import { naviVideoSchema } from './naviVideoSchema'
 import { appearanceSchema } from './appearanceSchema'
 import { SettingsNode } from '../types'
 import { ExtraConfig } from '../../../../main/Globals'
@@ -12,7 +13,7 @@ export const settingsSchema: SettingsNode<ExtraConfig> = {
   route: 'new-settings',
   label: 'Settings',
   path: 'settings',
-  children: [generalSchema, audioSchema, videoSchema, appearanceSchema, systemSchema]
+  children: [generalSchema, audioSchema, videoSchema, naviVideoSchema, appearanceSchema, systemSchema]
 }
 
 export const settingsRoutes = generateRoutes(settingsSchema)

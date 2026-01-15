@@ -19,6 +19,7 @@ import {
   SendString,
   HeartBeat
 } from '../messages/sendable.js'
+import { usbLogger } from './USBLogger.js'
 
 const CONFIG_NUMBER = 1
 const MAX_ERROR_COUNT = 5
@@ -30,6 +31,13 @@ export enum HandDriveType {
 
 export type PhoneTypeConfig = { frameInterval: number | null }
 type PhoneTypeConfigMap = { [K in PhoneType]: PhoneTypeConfig }
+
+export type NaviScreenConfig = {
+  enabled: boolean
+  width: number
+  height: number
+  fps: number
+}
 
 export type DongleConfig = {
   androidWorkMode?: boolean
@@ -56,6 +64,7 @@ export type DongleConfig = {
   wifiChannel: number
   micType: 'box' | 'os'
   phoneConfig: Partial<PhoneTypeConfigMap>
+  naviScreen: NaviScreenConfig
 }
 
 export const DEFAULT_CONFIG: DongleConfig = {
@@ -84,6 +93,12 @@ export const DEFAULT_CONFIG: DongleConfig = {
   phoneConfig: {
     [PhoneType.CarPlay]: { frameInterval: 5000 },
     [PhoneType.AndroidAuto]: { frameInterval: null }
+  },
+  naviScreen: {
+    enabled: true,
+    width: 800,
+    height: 480,
+    fps: 30
   }
 }
 
@@ -221,6 +236,8 @@ export class DongleDriver extends EventEmitter {
 
     try {
       const buf = msg.serialise()
+      // Log raw outgoing packet before USB transfer
+      usbLogger.logOutgoing(buf, msg?.constructor?.name)
       const view = new Uint8Array(buf.buffer as ArrayBuffer, buf.byteOffset, buf.byteLength)
       const res = await dev.transferOut(this._outEP.endpointNumber, view)
       return res.status === 'ok'
@@ -253,7 +270,8 @@ export class DongleDriver extends EventEmitter {
           const headerBuf = headerRes?.data?.buffer
           if (!headerBuf) throw new HeaderBuildError('Empty header')
 
-          const header = MessageHeader.fromBuffer(Buffer.from(headerBuf))
+          const headerBuffer = Buffer.from(headerBuf)
+          const header = MessageHeader.fromBuffer(headerBuffer)
           let extra: Buffer | undefined
 
           if (header.length) {
@@ -263,6 +281,9 @@ export class DongleDriver extends EventEmitter {
             if (!extraBuf) throw new Error('Failed to read extra data')
             extra = Buffer.from(extraBuf)
           }
+
+          // Log raw incoming packet (header + payload) before Pi-Carplay parsing
+          usbLogger.logIncoming(headerBuffer, extra)
 
           const msg = header.toMessage(extra)
           if (msg) {
@@ -448,6 +469,9 @@ export class DongleDriver extends EventEmitter {
         }
 
         this._closing = false
+
+        // Close USB logger and flush capture files
+        usbLogger.close()
       }
     })().finally(() => {
       this._closePromise = null
@@ -456,3 +480,6 @@ export class DongleDriver extends EventEmitter {
     return this._closePromise
   }
 }
+
+// Re-export the usbLogger for external access
+export { usbLogger } from './USBLogger.js'

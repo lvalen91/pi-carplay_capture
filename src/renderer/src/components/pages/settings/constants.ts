@@ -34,7 +34,7 @@ export enum MicTypeValues {
   'os' = 'os'
 }
 
-export const requiresRestartParams: (keyof ExtraConfig)[] = [
+export const requiresRestartParams: string[] = [
   'width',
   'height',
   'fps',
@@ -46,5 +46,8 @@ export const requiresRestartParams: (keyof ExtraConfig)[] = [
   'carName',
   'oemName',
   'mediaSound',
-  'hand'
+  'autoPlay',
+  'naviScreen.width',
+  'naviScreen.height',
+  'naviScreen.fps'
 ]

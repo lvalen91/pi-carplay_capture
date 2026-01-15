@@ -5,7 +5,7 @@ import { useSmartSettingsFromSchema } from './hooks/useSmartSettingsFromSchema'
 import { settingsSchema } from '../../../routes/schemas.ts/schema'
 import { useNavigate, useParams } from 'react-router'
 import { StackItem, KeyBindingRow } from './components'
-import { getNodeByPath, getValueByPath } from './utils'
+import { getNodeByPath } from './utils'
 import { Typography } from '@mui/material'
 import { SettingsFieldPage } from './components/SettingsFieldPage'
 import { SettingsFieldRow } from './components/SettingsFieldRow'
@@ -42,7 +42,7 @@ export function SettingsPage() {
       <SettingsLayout title={title} showRestart={showRestart} onRestart={handleRestart}>
         <SettingsFieldPage
           node={node}
-          value={getValueByPath(state, node.path)}
+          value={state[node.path]}
           onChange={(v) => handleFieldChange(node.path, v)}
         />
       </SettingsLayout>
@@ -92,7 +92,7 @@ export function SettingsPage() {
             key={_path}
             node={child}
             state={state}
-            value={getValueByPath(state, _path)}
+            value={state[_path]}
             onChange={(v) => handleFieldChange(_path, v)}
             onClick={child.page ? () => navigate(_path) : undefined}
           />

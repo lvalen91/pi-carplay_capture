@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useContext } from 'react'
-import { HashRouter as Router, useLocation, useRoutes } from 'react-router'
+import { HashRouter as Router, useLocation, useRoutes, Routes, Route } from 'react-router'
 import { Carplay, Camera } from './components/pages'
+import { NaviVideo } from './components/pages/navi/NaviVideo'
 import { Box, Modal } from '@mui/material'
 import { useCarplayStore, useStatusStore } from './store/store'
 import type { KeyCommand } from '@worker/types'
@@ -163,10 +164,17 @@ function AppInner() {
   )
 }
 
+function NaviApp() {
+  return <NaviVideo />
+}
+
 export default function App() {
   return (
     <Router>
-      <AppInner />
+      <Routes>
+        <Route path="/navi" element={<NaviApp />} />
+        <Route path="*" element={<AppInner />} />
+      </Routes>
     </Router>
   )
 }

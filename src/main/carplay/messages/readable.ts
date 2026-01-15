@@ -258,6 +258,23 @@ export class VideoData extends Message {
   }
 }
 
+// Navigation/Instrument Cluster video (Type 0x2c / 44)
+// Different header structure: 12 bytes (width, height, frame_type) before H.264 data
+export class NaviVideoData extends Message {
+  width: number
+  height: number
+  frameType: number
+  data: Buffer
+
+  constructor(header: MessageHeader, data: Buffer) {
+    super(header)
+    this.width = data.readUInt32LE(0)
+    this.height = data.readUInt32LE(4)
+    this.frameType = data.readUInt32LE(8)
+    this.data = data.subarray(12)
+  }
+}
+
 export enum MediaType {
   Data = 1,
   AlbumCover = 3,
