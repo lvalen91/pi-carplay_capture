@@ -4,7 +4,10 @@ CPC200-CCPA Adapter for firmware 2025.10 supports Navigation Video from Carplay.
 
 With an exploited CPC200-CCPA with telnet or ssh access. Use riddleBoxCfg and set 'AdvanceFeature' from 0 to 1
 
-Use for usb capture
+## Use for usb capture
+
+USB_LOG=1 npm run dev
+
 ```
   | USB_LOG=1       | Control packets only (config, touch, commands) |
   | USB_LOG=mic     | Control + microphone (audio TO dongle)         |
@@ -14,7 +17,9 @@ Use for usb capture
   | USB_LOG=all     | Everything + auto separate streams             |
   | USB_LOG=combine | Everything - No separte streams                |
 ```
-Output Files Per Session
+
+## Output Files Per Session
+
 ```
   ~/.pi-carplay/usb-logs/
   ├── usb-capture-<timestamp>.log           # Human-readable text
