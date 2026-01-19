@@ -218,10 +218,18 @@ export class CarplayService {
           }
         }
 
-        if (this.naviWebContents) {
-          if (w > 0 && h > 0 && (w !== this.lastNaviVideoWidth || h !== this.lastNaviVideoHeight)) {
-            this.lastNaviVideoWidth = w
-            this.lastNaviVideoHeight = h
+        if (w > 0 && h > 0 && (w !== this.lastNaviVideoWidth || h !== this.lastNaviVideoHeight)) {
+          this.lastNaviVideoWidth = w
+          this.lastNaviVideoHeight = h
+
+          // Send to main window for settings/status display
+          this.webContents?.send('carplay-event', {
+            type: 'navi-resolution',
+            payload: { width: w, height: h }
+          })
+
+          // Send to navi window for rendering
+          if (this.naviWebContents) {
             this.naviWebContents.send('navi-video-resolution', { width: w, height: h })
             // Resize window to match video resolution
             const naviWin = BrowserWindow.fromWebContents(this.naviWebContents)
@@ -230,6 +238,8 @@ export class CarplayService {
               naviWin.setAspectRatio(w / h)
             }
           }
+        }
+        if (this.naviWebContents) {
           this.sendNaviChunked('navi-video-chunk', msg.data?.buffer as ArrayBuffer, 512 * 1024)
         }
       } else if (msg instanceof AudioData) {
@@ -758,7 +768,8 @@ export class CarplayService {
           }, 15000)
 
           this.started = true
-        } catch {
+        } catch (err) {
+          console.error('[CarplayService] Failed to start:', err)
           try {
             await this.webUsbDevice?.close()
           } catch {}

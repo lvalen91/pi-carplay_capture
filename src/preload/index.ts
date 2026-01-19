@@ -168,3 +168,59 @@ const appApi = {
 }
 
 contextBridge.exposeInMainWorld('app', appApi)
+
+// Adapter Log API - for pulling and tailing /tmp/ttyLog from the adapter
+type AdapterLogConfig = {
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+}
+
+type AdapterLogStatus = {
+  connected: boolean
+  tailing: boolean
+  logFile: string | null
+  config: {
+    host: string
+    port: number
+    username: string
+    password: string
+    remoteLogPath: string
+  }
+}
+
+const adapterLogApi = {
+  connect: (config?: AdapterLogConfig): Promise<{ ok: boolean; error?: string; logFile?: string }> =>
+    ipcRenderer.invoke('adapter-log:connect', config),
+
+  disconnect: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('adapter-log:disconnect'),
+
+  getStatus: (): Promise<AdapterLogStatus> => ipcRenderer.invoke('adapter-log:status'),
+
+  onLine: (cb: (line: string) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, line: string) => cb(line)
+    ipcRenderer.on('adapter-log:line', handler)
+    return () => ipcRenderer.removeListener('adapter-log:line', handler)
+  },
+
+  onConnected: (cb: (data: { logFile: string }) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, data: { logFile: string }) => cb(data)
+    ipcRenderer.on('adapter-log:connected', handler)
+    return () => ipcRenderer.removeListener('adapter-log:connected', handler)
+  },
+
+  onDisconnected: (cb: (data: { code: number }) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, data: { code: number }) => cb(data)
+    ipcRenderer.on('adapter-log:disconnected', handler)
+    return () => ipcRenderer.removeListener('adapter-log:disconnected', handler)
+  },
+
+  onError: (cb: (error: string) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, error: string) => cb(error)
+    ipcRenderer.on('adapter-log:error', handler)
+    return () => ipcRenderer.removeListener('adapter-log:error', handler)
+  }
+}
+
+contextBridge.exposeInMainWorld('adapterLog', adapterLogApi)

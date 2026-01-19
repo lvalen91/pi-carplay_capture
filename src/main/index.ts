@@ -15,6 +15,7 @@ import { Socket } from './Socket'
 import { ExtraConfig, DEFAULT_BINDINGS } from './Globals'
 import { USBService } from './usb/USBService'
 import { CarplayService } from './carplay/services/CarplayService'
+import { AdapterLogService } from './adapter/AdapterLogService'
 import { execFile, spawn } from 'node:child_process'
 import os from 'node:os'
 import https from 'node:https'
@@ -111,6 +112,7 @@ let isQuitting = false
 let suppressNextFsSync = false
 
 const carplayService = new CarplayService()
+const adapterLogService = new AdapterLogService()
 declare global {
   var carplayService: CarplayService | undefined
 }
@@ -212,6 +214,11 @@ app.on('before-quit', async (e) => {
 
     // Block hotplug callbacks ASAP
     usbService?.beginShutdown()
+
+    // Disconnect adapter log service
+    await measureStep('adapterLogService.disconnect()', async () => {
+      await withTimeout('adapterLogService.disconnect()', adapterLogService.disconnect(), 500)
+    })
 
     await measureStep('usbService.stop()', async () => {
       await withTimeout('usbService.stop()', usbService?.stop?.() ?? Promise.resolve(), tUsbStop)
@@ -947,6 +954,45 @@ app.whenReady().then(() => {
   ipcMain.handle('usb-log:marker', (_evt, message: string) => {
     usbLogger.logMarker(message)
     return { success: true }
+  })
+
+  // ============================
+  // Adapter Log IPC handlers
+  // ============================
+  ipcMain.handle(
+    'adapter-log:connect',
+    async (_evt, config?: { host?: string; port?: number; username?: string; password?: string }) => {
+      if (config) {
+        adapterLogService.updateConfig(config)
+      }
+      return adapterLogService.connect()
+    }
+  )
+
+  ipcMain.handle('adapter-log:disconnect', async () => {
+    await adapterLogService.disconnect()
+    return { ok: true }
+  })
+
+  ipcMain.handle('adapter-log:status', () => {
+    return adapterLogService.getStatus()
+  })
+
+  // Forward log lines to renderer
+  adapterLogService.on('log-line', (line: string) => {
+    mainWindow?.webContents.send('adapter-log:line', line)
+  })
+
+  adapterLogService.on('connected', (data: { logFile: string }) => {
+    mainWindow?.webContents.send('adapter-log:connected', data)
+  })
+
+  adapterLogService.on('disconnected', (data: { code: number }) => {
+    mainWindow?.webContents.send('adapter-log:disconnected', data)
+  })
+
+  adapterLogService.on('error', (error: string) => {
+    mainWindow?.webContents.send('adapter-log:error', error)
   })
 
   ipcMain.handle('app:getLatestRelease', async () => {
