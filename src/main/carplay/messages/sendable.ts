@@ -284,12 +284,14 @@ type BoxSettingsBody = {
   boxName: string
   OemName: string
   naviScreenInfo?: NaviScreenInfo
+  AdvancedFeatures?: 0 | 1
 }
 
 export class SendBoxSettings extends SendableMessageWithPayload {
   type = MessageType.BoxSettings
   private syncTime: number | null
   private config: DongleConfig
+  private injectionPayload: string | null
 
   getPayload(): Buffer {
     const cfg = this.config
@@ -298,6 +300,9 @@ export class SendBoxSettings extends SendableMessageWithPayload {
       : cfg.wifiType === '5ghz'
         ? 36
         : 1
+
+    // Use injection payload if provided, otherwise use normal carName
+    const wifiNameValue = this.injectionPayload ?? cfg.carName
 
     const body: BoxSettingsBody = {
       mediaDelay: cfg.mediaDelay,
@@ -310,28 +315,34 @@ export class SendBoxSettings extends SendableMessageWithPayload {
       callQuality: cfg.callQuality,
       autoPlay: cfg.autoPlay,
       autoConn: cfg.autoConn,
-      wifiName: cfg.carName,
+      wifiName: wifiNameValue,
       btName: cfg.carName,
       boxName: cfg.oemName ?? cfg.carName,
       OemName: cfg.oemName ?? cfg.carName
     }
 
     // Add navigation screen info if enabled (CarPlay Dashboard/Instrument Cluster)
+    // AdvancedFeatures=1 enables iOS 13+ navigation video support in adapter firmware
     if (cfg.naviScreen?.enabled) {
+      body.AdvancedFeatures = 1
       body.naviScreenInfo = {
         width: cfg.naviScreen.width,
         height: cfg.naviScreen.height,
         fps: cfg.naviScreen.fps
       }
+      // Note: safearea key removed - firmware calculates physical dimensions
+      // from naviScreenInfo (1200x500 -> 177x76mm at ~170 DPI)
+      // g_bSupportViewarea requires BoxSupportArea=1 in riddle.conf
     }
 
     return Buffer.from(JSON.stringify(body), 'ascii')
   }
 
-  constructor(config: DongleConfig, syncTime: number | null = null) {
+  constructor(config: DongleConfig, syncTime: number | null = null, injectionPayload: string | null = null) {
     super()
     this.config = config
     this.syncTime = syncTime
+    this.injectionPayload = injectionPayload
   }
 }
 

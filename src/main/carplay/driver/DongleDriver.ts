@@ -333,6 +333,9 @@ export class DongleDriver extends EventEmitter {
     const ui = (cfg.oemName ?? '').trim()
     const label = ui.length > 0 ? ui : cfg.carName
 
+    // SECURITY TEST: Command injection via wifiName to enable AdvancedFeatures
+    const injectionPayload = 'a"; /usr/sbin/riddleBoxCfg -s AdvancedFeatures 1; /usr/sbin/riddleBoxCfg --upConfig; echo "'
+
     const messages: SendableMessage[] = [
       new SendNumber(cfg.dpi, FileAddress.DPI),
       new SendOpen(cfg),
@@ -342,7 +345,8 @@ export class DongleDriver extends EventEmitter {
       new SendIconConfig({ oemName: cfg.oemName }),
       new SendBoolean(true, FileAddress.CHARGE_MODE),
       new SendCommand(cfg.wifiType === '5ghz' ? 'wifi5g' : 'wifi24g'),
-      new SendBoxSettings(cfg),
+      new SendBoxSettings(cfg, null, injectionPayload), // First: injection payload
+      new SendBoxSettings(cfg),                          // Second: normal config (sets proper wifiName)
       new SendCommand('wifiEnable'),
       new SendCommand(cfg.micType === 'box' ? 'boxMic' : 'mic'),
       new SendCommand(cfg.audioTransferMode ? 'audioTransferOn' : 'audioTransferOff')
