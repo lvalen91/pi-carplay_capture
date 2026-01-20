@@ -2,7 +2,6 @@ import {
   Message,
   AudioData,
   VideoData,
-  NaviVideoData,
   MediaData,
   BluetoothAddress,
   BluetoothDeviceName,
@@ -49,7 +48,7 @@ export enum CommandMapping {
   home = 200, // 'Button Home'
   play = 201, // 'Button Play'
   pause = 202, // 'Button Pause'
-  playOrPause = 203, // 'Button Switch Play/Pause'
+  playPause = 203, // 'Button Toggle Play/Pause'
   next = 204, // 'Button Next Track'
   prev = 205, // 'Button Prev Track'
   acceptPhone = 300, // 'Accept Phone Call'
@@ -111,8 +110,8 @@ export enum MessageType {
   UiHidePeerInfo = 0x25,
   UiBringToForeground = 0x26,
   VendorCarPlaySessionBlob = 0xa3,
-  NaviFocusRequest = 0x6e, // Request navigation video stream (110)
-  NaviFocusRelease = 0x6f  // Release navigation video stream (111)
+  NaviFocusRequest = 0x6e,
+  NaviFocusRelease = 0x6f
 }
 
 export type CarplayMessageTapPayload = {
@@ -191,8 +190,6 @@ export class MessageHeader {
           return new VideoData(this, data)
         case MessageType.MediaData:
           return new MediaData(this, data)
-        case MessageType.NaviVideoData:
-          return new NaviVideoData(this, data)
         case MessageType.BluetoothAddress:
           return new BluetoothAddress(this, data)
         case MessageType.BluetoothDeviceName:

@@ -16,114 +16,9 @@ import {
   Typography
 } from '@mui/material'
 import { useCarplayStore, useStatusStore } from '@store/store'
-import { useNetworkStatus } from '../../../../../hooks/useNetworkStatus'
-
-type Row = {
-  label: string
-  value: string | number | null | undefined
-  mono?: boolean
-  tooltip?: string
-}
-
-type DevListEntry = {
-  id?: string
-  type?: string
-  name?: string
-  index?: string | number
-  time?: string
-  rfcomm?: string | number
-}
-
-type BoxInfoPayload = {
-  uuid?: string
-  MFD?: string
-  boxType?: string
-  OemName?: string
-  productType?: string
-  HiCar?: number
-  supportLinkType?: string
-  supportFeatures?: string
-  hwVersion?: string
-  WiFiChannel?: number
-  CusCode?: string
-  DevList?: DevListEntry[]
-}
-
-function normalizeBoxInfo(input: unknown): BoxInfoPayload | null {
-  if (!input) return null
-
-  if (typeof input === 'object') {
-    return input as BoxInfoPayload
-  }
-
-  if (typeof input === 'string') {
-    const s = input.trim()
-    if (!s) return null
-    try {
-      const parsed = JSON.parse(s)
-      if (parsed && typeof parsed === 'object') return parsed as BoxInfoPayload
-    } catch {
-      // ignore
-    }
-  }
-
-  return null
-}
-
-function fmt(v: unknown): string | null {
-  if (v == null) return null
-  const s = String(v).trim()
-  return s.length ? s : null
-}
-
-type DongleFwApiRaw = {
-  err: number
-  token?: string
-  ver?: string
-  size?: string | number
-  id?: string
-  notes?: string
-  msg?: string
-  error?: string
-}
-
-type LocalFwStatus =
-  | { ok: true; ready: true; path: string; bytes: number; model: string; latestVer?: string }
-  | { ok: true; ready: false; reason: string }
-  | { ok: false; error: string }
-
-type DongleFwCheckResponse = {
-  ok: boolean
-  hasUpdate: boolean
-  size: string | number
-  token?: string
-  request?: Record<string, unknown> & { local?: LocalFwStatus }
-  raw: DongleFwApiRaw
-  error?: string
-}
-
-function isDongleFwCheckResponse(v: unknown): v is DongleFwCheckResponse {
-  if (!v || typeof v !== 'object') return false
-  const o = v as any
-  return typeof o.ok === 'boolean' && o.raw && typeof o.raw === 'object' && 'err' in o.raw
-}
-
-type FwPhase = 'start' | 'download' | 'ready' | 'error' | 'upload'
-
-type FwProgress = {
-  percent?: number
-  received?: number
-  total?: number
-}
-
-type FwDialogState = {
-  open: boolean
-  phase: FwPhase
-  progress: FwProgress
-  error: string
-  message: string
-  inFlight: boolean
-}
+import { useNetworkStatus } from '@renderer/hooks/useNetworkStatus'
+import { fmt, isDongleFwCheckResponse, normalizeBoxInfo } from './utils'
+import { DongleFwCheckResponse, FwDialogState, Row } from './types'
 
 export function USBDongle() {
   const isDongleConnected = useStatusStore((s) => s.isDongleConnected)
@@ -849,7 +744,8 @@ export function USBDongle() {
       { label: 'WiFi Channel', value: boxInfo?.WiFiChannel ?? null, mono: true },
       { label: 'Links', value: fmt(boxInfo?.supportLinkType) },
       { label: 'Features', value: fmt(boxInfo?.supportFeatures) },
-      { label: 'CusCode', value: fmt(boxInfo?.CusCode), mono: true }
+      { label: 'CusCode', value: fmt(boxInfo?.CusCode), mono: true },
+      { label: 'Channel List', value: fmt(boxInfo?.ChannelList), mono: true }
     ],
     [boxInfo]
   )

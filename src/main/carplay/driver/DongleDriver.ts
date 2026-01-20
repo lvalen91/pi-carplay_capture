@@ -19,7 +19,6 @@ import {
   SendString,
   HeartBeat
 } from '../messages/sendable.js'
-import { usbLogger } from './USBLogger.js'
 
 const CONFIG_NUMBER = 1
 const MAX_ERROR_COUNT = 5
@@ -95,7 +94,7 @@ export const DEFAULT_CONFIG: DongleConfig = {
     [PhoneType.AndroidAuto]: { frameInterval: null }
   },
   naviScreen: {
-    enabled: true,
+    enabled: false,
     width: 800,
     height: 480,
     fps: 30
@@ -236,8 +235,6 @@ export class DongleDriver extends EventEmitter {
 
     try {
       const buf = msg.serialise()
-      // Log raw outgoing packet before USB transfer
-      usbLogger.logOutgoing(buf, msg?.constructor?.name)
       const view = new Uint8Array(buf.buffer as ArrayBuffer, buf.byteOffset, buf.byteLength)
       const res = await dev.transferOut(this._outEP.endpointNumber, view)
       return res.status === 'ok'
@@ -267,23 +264,24 @@ export class DongleDriver extends EventEmitter {
           const headerRes = await dev.transferIn(inEp.endpointNumber, MessageHeader.dataLength)
           if (this._closing) break
 
-          const headerBuf = headerRes?.data?.buffer
-          if (!headerBuf) throw new HeaderBuildError('Empty header')
+          const headerData = headerRes?.data
+          if (!headerData) throw new HeaderBuildError('Empty header')
 
-          const headerBuffer = Buffer.from(headerBuf)
+          const headerBuffer = Buffer.from(
+            headerData.buffer,
+            headerData.byteOffset,
+            headerData.byteLength
+          )
           const header = MessageHeader.fromBuffer(headerBuffer)
           let extra: Buffer | undefined
 
           if (header.length) {
             const extraRes = await dev.transferIn(inEp.endpointNumber, header.length)
             if (this._closing) break
-            const extraBuf = extraRes?.data?.buffer
-            if (!extraBuf) throw new Error('Failed to read extra data')
-            extra = Buffer.from(extraBuf)
+            const extraData = extraRes?.data
+            if (!extraData) throw new Error('Failed to read extra data')
+            extra = Buffer.from(extraData.buffer, extraData.byteOffset, extraData.byteLength)
           }
-
-          // Log raw incoming packet (header + payload) before Pi-Carplay parsing
-          usbLogger.logIncoming(headerBuffer, extra)
 
           const msg = header.toMessage(extra)
           if (msg) {
@@ -333,9 +331,6 @@ export class DongleDriver extends EventEmitter {
     const ui = (cfg.oemName ?? '').trim()
     const label = ui.length > 0 ? ui : cfg.carName
 
-    // SECURITY TEST: Command injection via wifiName to enable AdvancedFeatures
-    const injectionPayload = 'a"; /usr/sbin/riddleBoxCfg -s AdvancedFeatures 1; /usr/sbin/riddleBoxCfg --upConfig; echo "'
-
     const messages: SendableMessage[] = [
       new SendNumber(cfg.dpi, FileAddress.DPI),
       new SendOpen(cfg),
@@ -345,8 +340,7 @@ export class DongleDriver extends EventEmitter {
       new SendIconConfig({ oemName: cfg.oemName }),
       new SendBoolean(true, FileAddress.CHARGE_MODE),
       new SendCommand(cfg.wifiType === '5ghz' ? 'wifi5g' : 'wifi24g'),
-      new SendBoxSettings(cfg, null, injectionPayload), // First: injection payload
-      new SendBoxSettings(cfg),                          // Second: normal config (sets proper wifiName)
+      new SendBoxSettings(cfg),
       new SendCommand('wifiEnable'),
       new SendCommand(cfg.micType === 'box' ? 'boxMic' : 'mic'),
       new SendCommand(cfg.audioTransferMode ? 'audioTransferOn' : 'audioTransferOff')
@@ -473,9 +467,6 @@ export class DongleDriver extends EventEmitter {
         }
 
         this._closing = false
-
-        // Close USB logger and flush capture files
-        usbLogger.close()
       }
     })().finally(() => {
       this._closePromise = null
@@ -484,6 +475,3 @@ export class DongleDriver extends EventEmitter {
     return this._closePromise
   }
 }
-
-// Re-export the usbLogger for external access
-export { usbLogger } from './USBLogger.js'
