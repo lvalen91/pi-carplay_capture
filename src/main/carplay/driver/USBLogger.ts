@@ -94,13 +94,20 @@ const MESSAGE_TYPE_NAMES: Record<number, string> = {
   [MessageType.HiCarLink]: 'HiCarLink',
   [MessageType.BoxSettings]: 'BoxSettings',
   [MessageType.MediaData]: 'MediaData',
+  [MessageType.AltVideoData]: 'AltVideoData',
+  [MessageType.NaviVideoData]: 'NaviVideoData',
   [MessageType.SendFile]: 'SendFile',
   [MessageType.HeartBeat]: 'HeartBeat',
+  [MessageType.UpdateProgress]: 'UpdateProgress',
+  [MessageType.UpdateState]: 'UpdateState',
   [MessageType.SoftwareVersion]: 'SoftwareVersion',
   [MessageType.PeerBluetoothAddress]: 'PeerBluetoothAddress',
   [MessageType.PeerBluetoothAddressAlt]: 'PeerBluetoothAddressAlt',
   [MessageType.UiHidePeerInfo]: 'UiHidePeerInfo',
-  [MessageType.UiBringToForeground]: 'UiBringToForeground'
+  [MessageType.UiBringToForeground]: 'UiBringToForeground',
+  [MessageType.VendorCarPlaySessionBlob]: 'VendorCarPlaySessionBlob',
+  [MessageType.NaviFocusRequest]: 'NaviFocusRequest',
+  [MessageType.NaviFocusRelease]: 'NaviFocusRelease'
 }
 
 // Per-stream state
@@ -205,8 +212,14 @@ export class USBLogger {
     }
   }
 
+  private isVideoMessage(msgType: number): boolean {
+    return msgType === MessageType.VideoData ||
+           msgType === MessageType.NaviVideoData ||
+           msgType === MessageType.AltVideoData
+  }
+
   private getStreamType(direction: number, msgType: number): StreamType {
-    if (msgType === MessageType.VideoData) {
+    if (this.isVideoMessage(msgType)) {
       return 'video'
     } else if (msgType === MessageType.AudioData) {
       // IN = from dongle = speaker output, OUT = to dongle = microphone input
@@ -327,7 +340,8 @@ export class USBLogger {
 
   private shouldLogIncoming(msgType: number): boolean {
     if (!this.config.enabled) return false
-    if (msgType === MessageType.VideoData && !this.config.includeVideoData) return false
+    // Filter all video types (VideoData, NaviVideoData, AltVideoData)
+    if (this.isVideoMessage(msgType) && !this.config.includeVideoData) return false
     if (msgType === MessageType.AudioData) {
       // Incoming audio = speaker data from dongle
       if (!this.config.includeSpeakerData && !this.config.includeAudioData) return false
@@ -337,7 +351,8 @@ export class USBLogger {
 
   private shouldLogOutgoing(msgType: number): boolean {
     if (!this.config.enabled) return false
-    if (msgType === MessageType.VideoData && !this.config.includeVideoData) return false
+    // Filter all video types (VideoData, NaviVideoData, AltVideoData)
+    if (this.isVideoMessage(msgType) && !this.config.includeVideoData) return false
     if (msgType === MessageType.AudioData) {
       // Outgoing audio = microphone data to dongle
       if (!this.config.includeMicData && !this.config.includeAudioData) return false
