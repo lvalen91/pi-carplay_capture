@@ -1,5 +1,6 @@
 import EventEmitter from 'events'
 import { MessageHeader, HeaderBuildError } from '../messages/common.js'
+import { usbLogger } from './USBLogger.js'
 import {
   PhoneType,
   BoxInfo,
@@ -235,6 +236,7 @@ export class DongleDriver extends EventEmitter {
 
     try {
       const buf = msg.serialise()
+      usbLogger.logOutgoing(buf, msg?.constructor?.name)
       const view = new Uint8Array(buf.buffer as ArrayBuffer, buf.byteOffset, buf.byteLength)
       const res = await dev.transferOut(this._outEP.endpointNumber, view)
       return res.status === 'ok'
@@ -282,6 +284,8 @@ export class DongleDriver extends EventEmitter {
             if (!extraData) throw new Error('Failed to read extra data')
             extra = Buffer.from(extraData.buffer, extraData.byteOffset, extraData.byteLength)
           }
+
+          usbLogger.logIncoming(headerBuffer, extra)
 
           const msg = header.toMessage(extra)
           if (msg) {
