@@ -8,6 +8,11 @@ export const naviVideoSchema: SettingsNode<ExtraConfig> = {
   path: '',
   children: [
     {
+      type: 'checkbox',
+      label: 'Enabled',
+      path: 'naviScreen.enabled'
+    },
+    {
       type: 'number',
       label: 'Width',
       path: 'naviScreen.width',

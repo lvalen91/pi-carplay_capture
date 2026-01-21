@@ -47,6 +47,7 @@ export const requiresRestartParams: string[] = [
   'oemName',
   'mediaSound',
   'autoPlay',
+  'naviScreen.enabled',
   'naviScreen.width',
   'naviScreen.height',
   'naviScreen.fps'

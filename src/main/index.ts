@@ -9,7 +9,8 @@ import {
   promises as fsp
 } from 'fs'
 import { electronApp, is } from '@electron-toolkit/utils'
-import { DEFAULT_CONFIG, usbLogger } from './carplay/driver/DongleDriver'
+import { DEFAULT_CONFIG } from './carplay/driver/DongleDriver'
+import { usbLogger } from './carplay/driver/USBLogger'
 import { ICON_120_B64, ICON_180_B64, ICON_256_B64 } from './carplay/assets/carIcons'
 import { Socket } from './Socket'
 import { ExtraConfig, DEFAULT_BINDINGS } from './Globals'
@@ -271,7 +272,7 @@ function loadConfig(): ExtraConfig {
   // Start with defaults
   const merged: ExtraConfig = {
     ...DEFAULT_CONFIG,
-    kiosk: true,
+    kiosk: false,
     camera: '',
     nightMode: true,
     audioVolume: 1.0,
@@ -1100,9 +1101,8 @@ app.whenReady().then(() => {
   createWindow()
 
   // Pre-create navi window (hidden) so it's ready when video arrives
-  if (config.naviScreen?.enabled !== false) {
-    createNaviWindow(false)
-  }
+  // Always create regardless of enabled state - window will show when NaviVideoData (0x2c) is received
+  createNaviWindow(false)
 
   // Register callbacks for navi video start/stop
   carplayService.setNaviVideoCallbacks(
