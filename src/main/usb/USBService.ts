@@ -26,13 +26,18 @@ export class USBService {
     try {
       usb.removeAllListeners('detach')
     } catch {}
+    // Unref hotplug events to prevent crash during Node.js environment cleanup
+    try {
+      usb.unrefHotplugEvents()
+    } catch {}
   }
 
   constructor(private carplay: CarplayService) {
     this.registerIpcHandlers()
     this.listenToUsbEvents()
+    // Unref hotplug events so they don't block app quit or cause crashes during cleanup
     try {
-      if (process.platform !== 'darwin') usb.unrefHotplugEvents()
+      usb.unrefHotplugEvents()
     } catch {}
 
     const device = getDeviceList().find(this.isDongle)

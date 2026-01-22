@@ -243,8 +243,10 @@ app.on('before-quit', async (e) => {
   } catch (err) {
     console.warn('[MAIN] Error while quitting:', err)
   } finally {
-    setTimeout(() => clearTimeout(watchdog), 250)
-    setImmediate(() => app.quit())
+    clearTimeout(watchdog)
+    // Allow pending USB async callbacks to settle before Node.js cleanup begins
+    await sleep(150)
+    app.quit()
   }
 })
 
