@@ -73,7 +73,11 @@ export function useSmartSettings<T extends Record<string, any>>(
     setState((prev) => {
       const next = { ...prev, [path]: nextValue }
 
-      const newSettings = structuredClone((settings ?? {}) as any)
+      // IMPORTANT: Get the LATEST settings from the store to avoid stale closure issues.
+      // Using `settings` from the hook parameter would capture stale values if the user
+      // makes multiple changes before the component re-renders with updated props.
+      const currentSettings = useCarplayStore.getState().settings
+      const newSettings = structuredClone((currentSettings ?? {}) as any)
       Object.entries(next).forEach(([p, v]) => {
         setValueByPath(newSettings, p, v)
       })
