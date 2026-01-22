@@ -5,7 +5,6 @@ import { WebGPURenderer } from './WebGPURenderer'
 
 export interface FrameRenderer {
   draw(data: VideoFrame): void
-  clear(): void
 }
 
 const scope = self as unknown as Worker
@@ -46,16 +45,6 @@ export class RendererWorker {
 
   updateTargetFps(fps?: number) {
     this.setTargetFps(fps)
-  }
-
-  clear() {
-    // Close any pending frame
-    if (this.pendingFrame) {
-      this.pendingFrame.close()
-      this.pendingFrame = null
-    }
-    // Clear the canvas
-    this.renderer?.clear()
   }
 
   private onVideoDecoderOutput = (frame: VideoFrame) => {
@@ -340,10 +329,6 @@ scope.addEventListener('message', (event: MessageEvent<WorkerEvent>) => {
 
     case 'updateFps':
       worker.updateTargetFps((msg as UpdateFpsEvent).fps)
-      break
-
-    case 'clear':
-      worker.clear()
       break
 
     default:

@@ -199,18 +199,14 @@ export class CarplayService {
         }
       } else if (msg instanceof Opened) {
         // Opened message contains negotiated video settings from adapter
-        const w = msg.width
-        const h = msg.height
+        // Only store FPS here - do NOT store width/height as that would prevent
+        // the first VideoData from triggering the 'resolution' event
+        // Do NOT send 'resolution' event here as that would prematurely trigger
+        // streaming state before phone connects
         const fps = msg.fps
-        console.log(`[CarplayService] Opened: ${w}x${h} @ ${fps}fps`)
-        if (w > 0 && h > 0 && fps > 0) {
-          this.lastVideoWidth = w
-          this.lastVideoHeight = h
+        console.log(`[CarplayService] Opened: ${msg.width}x${msg.height} @ ${fps}fps`)
+        if (fps > 0) {
           this.lastVideoFps = fps
-          this.webContents.send('carplay-event', {
-            type: 'resolution',
-            payload: { width: w, height: h, fps }
-          })
         }
       } else if (msg instanceof VideoData) {
         if (!this.firstFrameLogged) {
