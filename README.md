@@ -1,19 +1,12 @@
-## Pi-Carplay with RAW USB recording and Navi Video
+## Fork of [Pi-Carplay by f-io](https://github.com/f-io/pi-carplay)
 
-#### Also
-- ttyLog Pull from Adapter (assuming it has SSH and a blank password)
-- Navigation Video Configuration + Togggle
-- Maybe other things I forgot
-
-#### Build with the usual and then open with Logging.
-
-npm install && npm run rebuild:native && npm run build && sleep 2 && USB_LOG=all npm run dev
+### Pi-Carplay with RAW USB recording
 
 CPC200-CCPA Adapter for firmware 2025.10 supports Navigation Video from Carplay.
 
-An Adapter with 2025.10 Firmware, enable Nav Video in App Settings. A second Video will appear with the rendered Nav Video
+With an exploited CPC200-CCPA with telnet or ssh access. Use riddleBoxCfg and set 'AdvanceFeature' from 0 to 1
 
-## Use for usb capture
+### Use for usb capture
 
 USB_LOG=1 npm run dev
 
@@ -53,3 +46,7 @@ USB_LOG=1 npm run dev
   | audio-out | IN        | PCM speaker data FROM dongle     |
   | control   | Both      | Commands, touch, config, BT/WiFi |
 ```
+
+### Capture UI Controls
+
+Are available in Settings > System 

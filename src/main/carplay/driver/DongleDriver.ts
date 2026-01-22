@@ -32,6 +32,13 @@ export enum HandDriveType {
 export type PhoneTypeConfig = { frameInterval: number | null }
 type PhoneTypeConfigMap = { [K in PhoneType]: PhoneTypeConfig }
 
+export type NaviScreenConfig = {
+  enabled: boolean
+  width: number
+  height: number
+  fps: number
+}
+
 export type DongleConfig = {
   androidWorkMode?: boolean
   width: number
@@ -52,7 +59,7 @@ export type DongleConfig = {
   callQuality: 0 | 1 | 2
   autoPlay: boolean
   autoConn: boolean
-  naviScreenEnabled: boolean
+  naviScreen: NaviScreenConfig
   audioTransferMode: boolean
   wifiType: '2.4ghz' | '5ghz'
   wifiChannel: number
@@ -79,7 +86,12 @@ export const DEFAULT_CONFIG: DongleConfig = {
   callQuality: 1,
   autoPlay: true,
   autoConn: true,
-  naviScreenEnabled: false,
+  naviScreen: {
+    enabled: false,
+    width: 800,
+    height: 480,
+    fps: 30
+  },
   audioTransferMode: false,
   wifiType: '5ghz',
   wifiChannel: 36,

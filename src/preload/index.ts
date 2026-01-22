@@ -114,9 +114,6 @@ const api = {
 
 contextBridge.exposeInMainWorld('carplay', api)
 
-type UpdateEvent = { phase: string; message?: string }
-type UpdateProgress = { phase?: string; percent?: number; received?: number; total?: number }
-
 const naviWindowApi = {
   open: (): Promise<void> => ipcRenderer.invoke('navi:open'),
   close: (): Promise<void> => ipcRenderer.invoke('navi:close'),
@@ -126,6 +123,9 @@ const naviWindowApi = {
 }
 
 contextBridge.exposeInMainWorld('naviWindow', naviWindowApi)
+
+type UpdateEvent = { phase: string; message?: string }
+type UpdateProgress = { phase?: string; percent?: number; received?: number; total?: number }
 
 const appApi = {
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
@@ -169,58 +169,112 @@ const appApi = {
 
 contextBridge.exposeInMainWorld('app', appApi)
 
-// Adapter Log API - for pulling and tailing /tmp/ttyLog from the adapter
+// USB Capture API
+type USBCaptureConfig = {
+  includeVideoData?: boolean
+  includeMicData?: boolean
+  includeSpeakerData?: boolean
+  includeAudioData?: boolean
+  separateStreams?: boolean
+}
+
+type USBCaptureStatus = {
+  enabled: boolean
+  hasActiveSession: boolean
+  config: USBCaptureConfig & { enabled: boolean }
+  stats: {
+    packetsIn: number
+    packetsOut: number
+    bytesIn: number
+    bytesOut: number
+    elapsed: number
+  }
+  sessionFiles: {
+    textLog: string
+    binaryCapture: string
+    jsonIndex: string
+  } | null
+}
+
+type USBCaptureEnableResult = {
+  ok: boolean
+  enabled: boolean
+  sessionFiles: USBCaptureStatus['sessionFiles']
+}
+
+type USBCaptureDisableResult = {
+  ok: boolean
+  enabled: boolean
+  finalStats: USBCaptureStatus['stats']
+  sessionFiles: USBCaptureStatus['sessionFiles']
+}
+
+const usbCaptureApi = {
+  getStatus: (): Promise<USBCaptureStatus> =>
+    ipcRenderer.invoke('usb-capture:getStatus'),
+
+  enable: (options?: {
+    config?: USBCaptureConfig
+    resetAdapter?: boolean
+  }): Promise<USBCaptureEnableResult> =>
+    ipcRenderer.invoke('usb-capture:enable', options),
+
+  disable: (): Promise<USBCaptureDisableResult> =>
+    ipcRenderer.invoke('usb-capture:disable'),
+
+  updateConfig: (config: USBCaptureConfig): Promise<{ ok: boolean; config: USBCaptureConfig }> =>
+    ipcRenderer.invoke('usb-capture:updateConfig', config),
+
+  getStats: (): Promise<USBCaptureStatus['stats']> =>
+    ipcRenderer.invoke('usb-capture:getStats'),
+
+  endSession: (): Promise<{
+    ok: boolean
+    stats: USBCaptureStatus['stats']
+    sessionFiles: USBCaptureStatus['sessionFiles']
+  }> => ipcRenderer.invoke('usb-capture:endSession')
+}
+
+contextBridge.exposeInMainWorld('usbCapture', usbCaptureApi)
+
+// Adapter TTYLog API
 type AdapterLogConfig = {
-  host?: string
-  port?: number
-  username?: string
-  password?: string
+  host: string
+  port: number
+  username: string
+  password: string
+  remoteLogPath: string
 }
 
 type AdapterLogStatus = {
   connected: boolean
   tailing: boolean
   logFile: string | null
-  config: {
-    host: string
-    port: number
-    username: string
-    password: string
-    remoteLogPath: string
-  }
+  config: AdapterLogConfig
 }
 
 const adapterLogApi = {
-  connect: (config?: AdapterLogConfig): Promise<{ ok: boolean; error?: string; logFile?: string }> =>
+  getStatus: (): Promise<AdapterLogStatus> =>
+    ipcRenderer.invoke('adapter-log:getStatus'),
+
+  connect: (config?: {
+    host?: string
+    port?: number
+    username?: string
+    password?: string
+  }): Promise<{ ok: boolean; error?: string; logFile?: string }> =>
     ipcRenderer.invoke('adapter-log:connect', config),
 
-  disconnect: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('adapter-log:disconnect'),
+  disconnect: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('adapter-log:disconnect'),
 
-  getStatus: (): Promise<AdapterLogStatus> => ipcRenderer.invoke('adapter-log:status'),
-
-  onLine: (cb: (line: string) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, line: string) => cb(line)
-    ipcRenderer.on('adapter-log:line', handler)
-    return () => ipcRenderer.removeListener('adapter-log:line', handler)
-  },
-
-  onConnected: (cb: (data: { logFile: string }) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, data: { logFile: string }) => cb(data)
-    ipcRenderer.on('adapter-log:connected', handler)
-    return () => ipcRenderer.removeListener('adapter-log:connected', handler)
-  },
-
-  onDisconnected: (cb: (data: { code: number }) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, data: { code: number }) => cb(data)
-    ipcRenderer.on('adapter-log:disconnected', handler)
-    return () => ipcRenderer.removeListener('adapter-log:disconnected', handler)
-  },
-
-  onError: (cb: (error: string) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, error: string) => cb(error)
-    ipcRenderer.on('adapter-log:error', handler)
-    return () => ipcRenderer.removeListener('adapter-log:error', handler)
-  }
+  updateConfig: (config: {
+    host?: string
+    port?: number
+    username?: string
+    password?: string
+  }): Promise<{ ok: boolean; config: AdapterLogConfig }> =>
+    ipcRenderer.invoke('adapter-log:updateConfig', config)
 }
 
 contextBridge.exposeInMainWorld('adapterLog', adapterLogApi)

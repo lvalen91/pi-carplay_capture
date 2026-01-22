@@ -11,12 +11,12 @@ import {
 import { electronApp, is } from '@electron-toolkit/utils'
 import { DEFAULT_CONFIG } from './carplay/driver/DongleDriver'
 import { usbLogger } from './carplay/driver/USBLogger'
+import { AdapterLogService } from './adapter/AdapterLogService'
 import { ICON_120_B64, ICON_180_B64, ICON_256_B64 } from './carplay/assets/carIcons'
 import { Socket } from './Socket'
 import { ExtraConfig, DEFAULT_BINDINGS } from './Globals'
 import { USBService } from './usb/USBService'
 import { CarplayService } from './carplay/services/CarplayService'
-import { AdapterLogService } from './adapter/AdapterLogService'
 import { execFile, spawn } from 'node:child_process'
 import os from 'node:os'
 import https from 'node:https'
@@ -110,10 +110,10 @@ let socket: Socket
 let config: ExtraConfig
 let usbService: USBService
 let isQuitting = false
+const adapterLogService = new AdapterLogService()
 let suppressNextFsSync = false
 
 const carplayService = new CarplayService()
-const adapterLogService = new AdapterLogService()
 declare global {
   var carplayService: CarplayService | undefined
 }
@@ -216,14 +216,21 @@ app.on('before-quit', async (e) => {
     // Block hotplug callbacks ASAP
     usbService?.beginShutdown()
 
+    await measureStep('usbService.stop()', async () => {
+      await withTimeout('usbService.stop()', usbService?.stop?.() ?? Promise.resolve(), tUsbStop)
+    })
+
     // Disconnect adapter log service
     await measureStep('adapterLogService.disconnect()', async () => {
       await withTimeout('adapterLogService.disconnect()', adapterLogService.disconnect(), 500)
     })
 
-    await measureStep('usbService.stop()', async () => {
-      await withTimeout('usbService.stop()', usbService?.stop?.() ?? Promise.resolve(), tUsbStop)
-    })
+    // End USB capture session cleanly
+    if (usbLogger.isEnabled() || usbLogger.hasActiveSession()) {
+      await measureStep('usbLogger.endSession()', async () => {
+        usbLogger.endSession()
+      })
+    }
 
     await measureStep('carplay.disconnectPhone()', async () => {
       await withTimeout('carplay.disconnectPhone()', carplayService.disconnectPhone(), tDisconnect)
@@ -272,7 +279,7 @@ function loadConfig(): ExtraConfig {
   // Start with defaults
   const merged: ExtraConfig = {
     ...DEFAULT_CONFIG,
-    kiosk: false,
+    kiosk: true,
     camera: '',
     nightMode: true,
     audioVolume: 1.0,
@@ -877,27 +884,154 @@ app.whenReady().then(() => {
     app.quit()
   })
 
-  ipcMain.handle('settings:get-kiosk', () => currentKiosk())
-  ipcMain.handle('getSettings', () => config)
+  // ============================
+  // USB Capture IPC Handlers
+  // ============================
 
-  // Navigation video window
-  ipcMain.handle('navi:open', () => {
-    showNaviWindow()
-  })
-  ipcMain.handle('navi:close', () => {
-    if (naviWindow && !naviWindow.isDestroyed()) {
-      naviWindow.close()
+  // Get current capture status
+  ipcMain.handle('usb-capture:getStatus', () => {
+    return {
+      enabled: usbLogger.isEnabled(),
+      hasActiveSession: usbLogger.hasActiveSession(),
+      config: usbLogger.getConfig(),
+      stats: usbLogger.getStats(),
+      sessionFiles: usbLogger.getSessionFiles()
     }
   })
-  ipcMain.handle('navi:hide', () => {
-    hideNaviWindow()
+
+  // Enable capture - optionally triggers adapter reset to capture initialization
+  ipcMain.handle('usb-capture:enable', async (_evt, options?: {
+    config?: {
+      includeVideoData?: boolean
+      includeMicData?: boolean
+      includeSpeakerData?: boolean
+      includeAudioData?: boolean
+      separateStreams?: boolean
+    }
+    resetAdapter?: boolean
+  }) => {
+    const captureConfig = {
+      logToConsole: true,
+      logToFile: true,
+      logToBinary: true,
+      separateStreams: options?.config?.separateStreams ?? true,
+      includeVideoData: options?.config?.includeVideoData ?? false,
+      includeMicData: options?.config?.includeMicData ?? false,
+      includeSpeakerData: options?.config?.includeSpeakerData ?? false,
+      includeAudioData: options?.config?.includeAudioData ?? false,
+      includeControlData: true,
+      maxPayloadHexBytes: 256
+    }
+
+    // Enable with new session
+    usbLogger.enable(captureConfig, true)
+
+    // Optionally reset adapter to capture full initialization
+    if (options?.resetAdapter) {
+      console.log('[USB Capture] Triggering adapter reset to capture initialization...')
+      try {
+        // Stop and restart carplay service to reset adapter
+        await carplayService.stop()
+        // Small delay before restart
+        await new Promise(r => setTimeout(r, 500))
+        // Mark as needing reconnect - USB hotplug will handle restart
+        carplayService.markDongleConnected(true)
+        await carplayService.autoStartIfNeeded()
+      } catch (err) {
+        console.error('[USB Capture] Adapter reset failed:', err)
+      }
+    }
+
+    return {
+      ok: true,
+      enabled: true,
+      sessionFiles: usbLogger.getSessionFiles()
+    }
   })
-  ipcMain.handle('navi:resize', (_evt, width: number, height: number) => {
-    resizeNaviWindow(width, height)
+
+  // Disable capture and end session
+  ipcMain.handle('usb-capture:disable', () => {
+    const stats = usbLogger.getStats()
+    const files = usbLogger.getSessionFiles()
+    usbLogger.disable(true) // End session on disable
+    return {
+      ok: true,
+      enabled: false,
+      finalStats: stats,
+      sessionFiles: files
+    }
   })
-  ipcMain.handle('navi:isVisible', () => {
-    return naviWindow && !naviWindow.isDestroyed() && naviWindow.isVisible()
+
+  // Update capture config without toggling enabled state
+  ipcMain.handle('usb-capture:updateConfig', (_evt, config: {
+    includeVideoData?: boolean
+    includeMicData?: boolean
+    includeSpeakerData?: boolean
+    includeAudioData?: boolean
+    separateStreams?: boolean
+  }) => {
+    usbLogger.updateConfig(config)
+    return { ok: true, config: usbLogger.getConfig() }
   })
+
+  // Get current session statistics
+  ipcMain.handle('usb-capture:getStats', () => {
+    return usbLogger.getStats()
+  })
+
+  // Manually end current session (keeps capture enabled for next session)
+  ipcMain.handle('usb-capture:endSession', () => {
+    const stats = usbLogger.getStats()
+    const files = usbLogger.getSessionFiles()
+    usbLogger.endSession()
+    return {
+      ok: true,
+      stats,
+      sessionFiles: files
+    }
+  })
+
+  // ============================
+  // Adapter TTYLog IPC Handlers
+  // ============================
+
+  // Get adapter log status
+  ipcMain.handle('adapter-log:getStatus', () => {
+    return adapterLogService.getStatus()
+  })
+
+  // Connect and start capturing adapter logs
+  ipcMain.handle('adapter-log:connect', async (_evt, config?: {
+    host?: string
+    port?: number
+    username?: string
+    password?: string
+  }) => {
+    if (config) {
+      adapterLogService.updateConfig(config)
+    }
+    return await adapterLogService.connect()
+  })
+
+  // Disconnect and stop capturing
+  ipcMain.handle('adapter-log:disconnect', async () => {
+    await adapterLogService.disconnect()
+    return { ok: true }
+  })
+
+  // Update config without connecting
+  ipcMain.handle('adapter-log:updateConfig', (_evt, config: {
+    host?: string
+    port?: number
+    username?: string
+    password?: string
+  }) => {
+    adapterLogService.updateConfig(config)
+    return { ok: true, config: adapterLogService.getStatus().config }
+  })
+
+  ipcMain.handle('settings:get-kiosk', () => currentKiosk())
+  ipcMain.handle('getSettings', () => config)
   ipcMain.handle('save-settings', (_evt, settings: Partial<ExtraConfig>) => {
     saveSettings(settings)
     return true
@@ -920,81 +1054,6 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
-
-  // USB Packet Logging IPC handlers
-  ipcMain.handle('usb-log:enable', (_evt, options?: {
-    includeVideoData?: boolean
-    includeMicData?: boolean      // Outgoing microphone audio
-    includeSpeakerData?: boolean  // Incoming speaker audio
-    includeAudioData?: boolean    // Shorthand for both mic + speaker
-    separateStreams?: boolean     // Write separate files per stream type
-    maxPayloadHexBytes?: number
-  }) => {
-    usbLogger.enable({
-      logToConsole: true,
-      logToFile: true,
-      logToBinary: true,
-      separateStreams: true,
-      ...options
-    })
-    return { enabled: true, message: 'USB packet logging enabled', files: usbLogger.getSessionFiles() }
-  })
-
-  ipcMain.handle('usb-log:disable', () => {
-    usbLogger.disable()
-    return { enabled: false, message: 'USB packet logging disabled' }
-  })
-
-  ipcMain.handle('usb-log:status', () => {
-    return {
-      enabled: usbLogger.isEnabled(),
-      stats: usbLogger.getStats()
-    }
-  })
-
-  ipcMain.handle('usb-log:marker', (_evt, message: string) => {
-    usbLogger.logMarker(message)
-    return { success: true }
-  })
-
-  // ============================
-  // Adapter Log IPC handlers
-  // ============================
-  ipcMain.handle(
-    'adapter-log:connect',
-    async (_evt, config?: { host?: string; port?: number; username?: string; password?: string }) => {
-      if (config) {
-        adapterLogService.updateConfig(config)
-      }
-      return adapterLogService.connect()
-    }
-  )
-
-  ipcMain.handle('adapter-log:disconnect', async () => {
-    await adapterLogService.disconnect()
-    return { ok: true }
-  })
-
-  ipcMain.handle('adapter-log:status', () => {
-    return adapterLogService.getStatus()
-  })
-
-  // Forward log lines to renderer
-  adapterLogService.on('log-line', (line: string) => {
-    mainWindow?.webContents.send('adapter-log:line', line)
-  })
-
-  adapterLogService.on('connected', (data: { logFile: string }) => {
-    mainWindow?.webContents.send('adapter-log:connected', data)
-  })
-
-  adapterLogService.on('disconnected', (data: { code: number }) => {
-    mainWindow?.webContents.send('adapter-log:disconnected', data)
-  })
-
-  adapterLogService.on('error', (error: string) => {
-    mainWindow?.webContents.send('adapter-log:error', error)
-  })
 
   ipcMain.handle('app:getLatestRelease', async () => {
     try {
@@ -1106,28 +1165,13 @@ app.whenReady().then(() => {
 
   // Register callbacks for navi video start/stop
   carplayService.setNaviVideoCallbacks(
-    (width, height) => {
-      // Auto-show and resize navi window when video starts
-      if (naviWindow && !naviWindow.isDestroyed()) {
-        naviWindow.setContentSize(width, height)
-        naviWindow.setAspectRatio(width / height)
-        if (!naviWindow.isVisible()) {
-          naviWindow.show()
-        }
-      } else {
-        // Window was closed, re-create and show it
-        createNaviWindow(true)
-        // Resize after it's ready
-        setTimeout(() => {
-          if (naviWindow && !naviWindow.isDestroyed()) {
-            naviWindow.setContentSize(width, height)
-            naviWindow.setAspectRatio(width / height)
-          }
-        }, 100)
-      }
+    (width: number, height: number) => {
+      console.log(`[Main] Navi video started: ${width}x${height}`)
+      resizeNaviWindow(width, height)
+      showNaviWindow()
     },
     () => {
-      // Auto-hide navi window when video stops
+      console.log('[Main] Navi video stopped')
       hideNaviWindow()
     }
   )
@@ -1159,12 +1203,6 @@ function saveSettings(next: Partial<ExtraConfig>) {
       ...DEFAULT_BINDINGS,
       ...(config.bindings ?? {}),
       ...(next.bindings ?? {})
-    },
-    // Deep merge naviScreen
-    naviScreen: {
-      ...DEFAULT_CONFIG.naviScreen,
-      ...(config.naviScreen ?? {}),
-      ...((next as any).naviScreen ?? {})
     }
   } as ExtraConfig
 

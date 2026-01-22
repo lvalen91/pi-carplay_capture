@@ -55,10 +55,6 @@ export interface CarplayStore {
   negotiatedWidth: number | null
   negotiatedHeight: number | null
 
-  // Navigation video resolution
-  naviWidth: number | null
-  naviHeight: number | null
-
   // USB descriptor
   vendorId: number | null
   productId: number | null
@@ -98,7 +94,6 @@ export interface CarplayStore {
   setDongleInfo: (info: { dongleFwVersion?: string; boxInfo?: unknown }) => void
 
   setNegotiatedResolution: (width: number, height: number) => void
-  setNaviResolution: (width: number, height: number) => void
   setAudioInfo: (info: {
     codec: string
     sampleRate: number
@@ -155,8 +150,6 @@ export const useCarplayStore = create<CarplayStore>((set, get) => ({
     set({
       negotiatedWidth: null,
       negotiatedHeight: null,
-      naviWidth: null,
-      naviHeight: null,
 
       vendorId: null,
       productId: null,
@@ -171,8 +164,6 @@ export const useCarplayStore = create<CarplayStore>((set, get) => ({
 
   negotiatedWidth: null,
   negotiatedHeight: null,
-  naviWidth: null,
-  naviHeight: null,
 
   vendorId: null,
   productId: null,
@@ -294,8 +285,6 @@ export const useCarplayStore = create<CarplayStore>((set, get) => ({
 
   setNegotiatedResolution: (width, height) =>
     set({ negotiatedWidth: width, negotiatedHeight: height }),
-
-  setNaviResolution: (width, height) => set({ naviWidth: width, naviHeight: height }),
 
   setAudioInfo: ({ codec, sampleRate, channels, bitDepth }) =>
     set({

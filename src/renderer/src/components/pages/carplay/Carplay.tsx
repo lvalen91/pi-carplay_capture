@@ -682,16 +682,6 @@ const CarplayComponent: React.FC<CarplayProps> = ({
           }
           break
         }
-        case 'navi-resolution': {
-          const payload = d.payload as { width?: number; height?: number } | undefined
-          if (payload && typeof payload.width === 'number' && typeof payload.height === 'number') {
-            useCarplayStore.setState({
-              naviWidth: payload.width,
-              naviHeight: payload.height
-            })
-          }
-          break
-        }
         case 'dongleInfo': {
           const p = d.payload as { dongleFwVersion?: string; boxInfo?: unknown } | undefined
           if (!p) break

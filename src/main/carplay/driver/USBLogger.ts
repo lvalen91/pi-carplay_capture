@@ -160,7 +160,7 @@ export class USBLogger {
   }
 
   private initFileStream() {
-    this.logDir = this.config.logDir || join(homedir(), '.pi-carplay', 'usb-logs')
+    this.logDir = this.config.logDir || join(homedir(), '.pi-carplay', 'usb-capture')
     if (!existsSync(this.logDir)) {
       mkdirSync(this.logDir, { recursive: true })
     }
@@ -268,24 +268,93 @@ export class USBLogger {
     }
   }
 
-  enable(config?: Partial<USBLoggerConfig>) {
+  /**
+   * Enable capture with optional config update
+   * @param config - Optional config overrides
+   * @param startNewSession - If true, starts a new capture session (closes any existing)
+   */
+  enable(config?: Partial<USBLoggerConfig>, startNewSession = true) {
     if (config) {
       this.config = { ...this.config, ...config }
     }
     this.config.enabled = true
-    if (this.config.logToFile && !this.fileStream) {
+
+    if (startNewSession) {
+      // Close any existing session first
+      if (this.fileStream || this.binaryStream) {
+        this.endSession()
+      }
+      // Start fresh session
+      if (this.config.logToFile) {
+        this.initFileStream()
+      }
+    } else if (this.config.logToFile && !this.fileStream) {
       this.initFileStream()
     }
     console.log('[USBLogger] Packet capture ENABLED')
   }
 
-  disable() {
+  /**
+   * Disable capture and optionally end the current session
+   * @param endCurrentSession - If true, closes files and writes indices
+   */
+  disable(endCurrentSession = false) {
     this.config.enabled = false
+    if (endCurrentSession) {
+      this.endSession()
+    }
     console.log('[USBLogger] Packet capture DISABLED')
+  }
+
+  /**
+   * End the current capture session - closes files and writes JSON indices
+   * Can be called on adapter disconnect, app quit, or manual stop
+   */
+  endSession() {
+    this.close() // Reuse existing close logic
+  }
+
+  /**
+   * Start a new capture session (closes any existing first)
+   */
+  startSession() {
+    if (this.fileStream || this.binaryStream) {
+      this.endSession()
+    }
+    if (this.config.logToFile || this.config.logToBinary) {
+      this.initFileStream()
+    }
+    // Reset counters
+    this.packetCount = { in: 0, out: 0 }
+    this.byteCount = { in: 0, out: 0 }
+    console.log('[USBLogger] New capture session started')
   }
 
   isEnabled(): boolean {
     return this.config.enabled
+  }
+
+  /**
+   * Get current configuration (for UI display)
+   */
+  getConfig(): USBLoggerConfig {
+    return { ...this.config }
+  }
+
+  /**
+   * Check if a session is currently active (files open)
+   */
+  hasActiveSession(): boolean {
+    return this.fileStream !== null || this.binaryStream !== null
+  }
+
+  /**
+   * Update config without changing enabled state
+   */
+  updateConfig(config: Partial<USBLoggerConfig>) {
+    const wasEnabled = this.config.enabled
+    this.config = { ...this.config, ...config }
+    this.config.enabled = wasEnabled // Preserve enabled state
   }
 
   private writeLog(message: string) {

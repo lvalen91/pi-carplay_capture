@@ -2,6 +2,7 @@ import {
   Message,
   AudioData,
   VideoData,
+  NaviVideoData,
   MediaData,
   BluetoothAddress,
   BluetoothDeviceName,
@@ -191,7 +192,7 @@ export class MessageHeader {
         case MessageType.AltVideoData:
           return new VideoData(this, data)
         case MessageType.NaviVideoData:
-          return new VideoData(this, data)
+          return new NaviVideoData(this, data)
         case MessageType.MediaData:
           return new MediaData(this, data)
         case MessageType.BluetoothAddress:

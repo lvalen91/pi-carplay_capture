@@ -25,6 +25,7 @@ import {
   DEFAULT_CONFIG
 } from '../messages'
 import { ExtraConfig } from '@main/Globals'
+import { usbLogger } from '../driver/USBLogger'
 import fs from 'fs'
 import path from 'path'
 import usb from 'usb'
@@ -91,9 +92,9 @@ export class CarplayService {
   private lastNaviVideoWidth?: number
   private lastNaviVideoHeight?: number
   private naviVideoActive = false
-  private dongleFwVersion?: string
   private onNaviVideoStart?: (width: number, height: number) => void
   private onNaviVideoStop?: () => void
+  private dongleFwVersion?: string
   private boxInfo?: unknown
   private lastDongleInfoEmitKey = ''
   private firmware = new FirmwareUpdateService()
@@ -137,11 +138,21 @@ export class CarplayService {
       if (msg instanceof Plugged) {
         this.clearTimeouts()
         this.webContents.send('carplay-event', { type: 'plugged' })
+        // Start new USB capture session on adapter connect if capture is enabled
+        if (usbLogger.isEnabled()) {
+          console.log('[CarplayService] Adapter plugged - starting new USB capture session')
+          usbLogger.startSession()
+        }
         if (!this.started && !this.isStarting) {
           this.start().catch(() => {})
         }
       } else if (msg instanceof Unplugged) {
         this.webContents.send('carplay-event', { type: 'unplugged' })
+        // End USB capture session on adapter disconnect for clean file closure
+        if (usbLogger.isEnabled() && usbLogger.hasActiveSession()) {
+          console.log('[CarplayService] Adapter unplugged - ending USB capture session')
+          usbLogger.endSession()
+        }
         if (!this.shuttingDown && !this.stopping) {
           this.stop().catch(() => {})
         }
@@ -279,6 +290,11 @@ export class CarplayService {
         fs.writeFileSync(file, JSON.stringify(out, null, 2), 'utf8')
       } else if (msg instanceof Command) {
         this.webContents.send('carplay-event', { type: 'command', message: msg })
+        // Respond to RequestNaviScreenFocus (508) by sending command 508 back
+        // This triggers HU_NEEDNAVI_STREAM D-Bus signal in the adapter firmware
+        if ((msg.value as number) === 508 && this.config.naviScreen?.enabled) {
+          this.driver.send(new SendCommand('requestNaviScreenFocus'))
+        }
       }
     })
 
@@ -677,6 +693,31 @@ export class CarplayService {
     this.onNaviVideoStop = onStop
   }
 
+  private sendNaviChunked(
+    channel: string,
+    data?: ArrayBuffer,
+    chunkSize = 512 * 1024
+  ) {
+    if (!this.naviWebContents || !data) return
+    let offset = 0
+    const total = data.byteLength
+    const id = Math.random().toString(36).slice(2)
+
+    while (offset < total) {
+      const end = Math.min(offset + chunkSize, total)
+      const chunk = data.slice(offset, end)
+
+      this.naviWebContents.send(channel, {
+        id,
+        offset,
+        total,
+        isLast: end >= total,
+        chunk: Buffer.from(chunk)
+      })
+      offset = end
+    }
+  }
+
   private emitDongleInfoIfChanged() {
     if (!this.webContents) return
 
@@ -737,9 +778,6 @@ export class CarplayService {
         this.lastDongleInfoEmitKey = ''
         this.lastVideoWidth = undefined
         this.lastVideoHeight = undefined
-        this.lastNaviVideoWidth = undefined
-        this.lastNaviVideoHeight = undefined
-        this.naviVideoActive = false
 
         const device = usb
           .getDeviceList()
@@ -763,8 +801,7 @@ export class CarplayService {
           }, 15000)
 
           this.started = true
-        } catch (err) {
-          console.error('[CarplayService] Failed to start:', err)
+        } catch {
           try {
             await this.webUsbDevice?.close()
           } catch {}
@@ -838,16 +875,6 @@ export class CarplayService {
       this.lastDongleInfoEmitKey = ''
       this.lastVideoWidth = undefined
       this.lastVideoHeight = undefined
-      this.lastNaviVideoWidth = undefined
-      this.lastNaviVideoHeight = undefined
-
-      // Hide navi window on disconnect
-      if (this.naviVideoActive) {
-        this.naviVideoActive = false
-        if (this.onNaviVideoStop) {
-          this.onNaviVideoStop()
-        }
-      }
     })().finally(() => {
       this.stopping = false
       this.isStopping = false
@@ -899,33 +926,6 @@ export class CarplayService {
       }
 
       this.webContents.send(channel, envelope)
-      offset = end
-    }
-  }
-
-  private sendNaviChunked(
-    channel: string,
-    data?: ArrayBuffer,
-    chunkSize = 512 * 1024
-  ) {
-    if (!this.naviWebContents || !data) return
-    let offset = 0
-    const total = data.byteLength
-    const id = Math.random().toString(36).slice(2)
-
-    while (offset < total) {
-      const end = Math.min(offset + chunkSize, total)
-      const chunk = data.slice(offset, end)
-
-      const envelope = {
-        id,
-        offset,
-        total,
-        isLast: end >= total,
-        chunk: Buffer.from(chunk)
-      }
-
-      this.naviWebContents.send(channel, envelope)
       offset = end
     }
   }

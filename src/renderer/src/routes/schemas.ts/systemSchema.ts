@@ -1,5 +1,7 @@
 import { SoftwareUpdate } from '../../components/pages/settings/pages/system/softwareUpdate/SoftwareUpdate'
 import { USBDongle } from '../../components/pages/settings/pages/system/usbDongle/USBDongle'
+import { USBCapture } from '../../components/pages/settings/pages/system/usbCapture/USBCapture'
+import { AdapterLog } from '../../components/pages/settings/pages/system/adapterLog/AdapterLog'
 import { About } from '../../components/pages/settings/pages/system/About'
 import { Restart } from '../../components/pages/settings/pages/system/Restart'
 import { PowerOff } from '../../components/pages/settings/pages/system/PowerOff'
@@ -25,6 +27,20 @@ export const systemSchema: SettingsNode<ExtraConfig> = {
       route: 'USBDongle',
       path: '',
       children: [{ type: 'custom', label: 'USB Dongle', path: 'carName', component: USBDongle }]
+    },
+    {
+      type: 'route',
+      label: 'USB Capture',
+      route: 'USBCapture',
+      path: '',
+      children: [{ type: 'custom', label: 'USB Capture', path: 'carName', component: USBCapture }]
+    },
+    {
+      type: 'route',
+      label: 'Adapter Logs',
+      route: 'AdapterLog',
+      path: '',
+      children: [{ type: 'custom', label: 'Adapter Logs', path: 'carName', component: AdapterLog }]
     },
     {
       type: 'route',

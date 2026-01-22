@@ -12,7 +12,6 @@ import {
   Divider,
   LinearProgress,
   Stack,
-  Switch,
   Typography
 } from '@mui/material'
 import { useCarplayStore, useStatusStore } from '@store/store'
@@ -41,10 +40,6 @@ export function USBDongle() {
   const negotiatedWidth = useCarplayStore((s) => s.negotiatedWidth)
   const negotiatedHeight = useCarplayStore((s) => s.negotiatedHeight)
 
-  // Navigation video stream
-  const naviWidth = useCarplayStore((s) => s.naviWidth)
-  const naviHeight = useCarplayStore((s) => s.naviHeight)
-
   // Audio stream
   const audioCodec = useCarplayStore((s) => s.audioCodec)
   const audioSampleRate = useCarplayStore((s) => s.audioSampleRate)
@@ -65,8 +60,6 @@ export function USBDongle() {
 
   const resolution =
     negotiatedWidth && negotiatedHeight ? `${negotiatedWidth}×${negotiatedHeight}` : '—'
-
-  const naviResolution = naviWidth && naviHeight ? `${naviWidth}×${naviHeight}` : null
 
   const audioLine = useMemo(() => {
     const parts: string[] = []
@@ -99,12 +92,6 @@ export function USBDongle() {
 
   // Changelog dialog UI state
   const [changelogOpen, setChangelogOpen] = useState(false)
-
-  // Adapter log state
-  const [adapterLogConnected, setAdapterLogConnected] = useState(false)
-  const [adapterLogConnecting, setAdapterLogConnecting] = useState(false)
-  const [adapterLogFile, setAdapterLogFile] = useState<string | null>(null)
-  const [adapterLogError, setAdapterLogError] = useState<string | null>(null)
 
   const ok = Boolean(fwResult?.ok) && fwResult?.raw?.err === 0
 
@@ -637,55 +624,6 @@ export function USBDongle() {
     handleFwAction('status').catch(() => {})
   }, [isDongleConnected, dongleFwVersion, boxInfo?.uuid, handleFwAction])
 
-  // Adapter log status check on mount and event listeners
-  useEffect(() => {
-    // Check initial status
-    window.adapterLog?.getStatus?.().then((status) => {
-      setAdapterLogConnected(status.connected)
-      setAdapterLogFile(status.logFile)
-    })
-
-    // Listen for connection events
-    const unsubConnected = window.adapterLog?.onConnected?.((data) => {
-      setAdapterLogConnected(true)
-      setAdapterLogConnecting(false)
-      setAdapterLogFile(data.logFile)
-      setAdapterLogError(null)
-    })
-
-    const unsubDisconnected = window.adapterLog?.onDisconnected?.(() => {
-      setAdapterLogConnected(false)
-      setAdapterLogConnecting(false)
-    })
-
-    const unsubError = window.adapterLog?.onError?.((error) => {
-      setAdapterLogError(error)
-      setAdapterLogConnecting(false)
-    })
-
-    return () => {
-      unsubConnected?.()
-      unsubDisconnected?.()
-      unsubError?.()
-    }
-  }, [])
-
-  const handleAdapterLogToggle = useCallback(async (enabled: boolean) => {
-    setAdapterLogError(null)
-    if (enabled) {
-      setAdapterLogConnecting(true)
-      const result = await window.adapterLog?.connect?.()
-      if (result && !result.ok) {
-        setAdapterLogError(result.error || 'Failed to connect')
-        setAdapterLogConnecting(false)
-      }
-    } else {
-      await window.adapterLog?.disconnect?.()
-      setAdapterLogConnected(false)
-      setAdapterLogFile(null)
-    }
-  }, [])
-
   const rowsTop = useMemo<Row[]>(
     () => [
       { label: 'Dongle', value: isDongleConnected ? 'Connected' : 'Not connected' },
@@ -750,16 +688,13 @@ export function USBDongle() {
     [boxInfo]
   )
 
-  const rowsStreams = useMemo<Row[]>(() => {
-    const rows: Row[] = [
-      { label: 'Video', value: resolution, mono: true },
+  const rowsStreams = useMemo<Row[]>(
+    () => [
+      { label: 'Resolution', value: resolution, mono: true },
       { label: 'Audio', value: audioLine, mono: true }
-    ]
-    if (naviResolution) {
-      rows.push({ label: 'Nav Video', value: naviResolution, mono: true })
-    }
-    return rows
-  }, [resolution, audioLine, naviResolution])
+    ],
+    [resolution, audioLine]
+  )
 
   const renderRows = (rows: Row[]) => (
     <Stack spacing={0.5}>
@@ -1016,43 +951,6 @@ export function USBDongle() {
           })}
         </Stack>
       )}
-
-      <Divider />
-
-      <Typography variant="subtitle2" color="text.secondary">
-        Adapter Log
-      </Typography>
-
-      <Box sx={{ px: 1, py: 0.5 }}>
-        <Stack direction="row" alignItems="center" spacing={2}>
-          <Switch
-            checked={adapterLogConnected}
-            onChange={(e) => handleAdapterLogToggle(e.target.checked)}
-            disabled={adapterLogConnecting}
-          />
-          <Box sx={{ flex: 1 }}>
-            <Typography>
-              {adapterLogConnecting
-                ? 'Connecting...'
-                : adapterLogConnected
-                  ? 'Capturing ttyLog'
-                  : 'Pull adapter ttyLog'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {adapterLogConnected && adapterLogFile
-                ? adapterLogFile
-                : 'Connect to adapter WiFi (192.168.43.1) first'}
-            </Typography>
-          </Box>
-          {adapterLogConnecting && <CircularProgress size={20} />}
-        </Stack>
-
-        {adapterLogError && (
-          <Alert severity="error" sx={{ mt: 1 }}>
-            {adapterLogError}
-          </Alert>
-        )}
-      </Box>
     </Box>
   )
 }
