@@ -314,7 +314,7 @@ export class SendBoxSettings extends SendableMessageWithPayload {
       OemName: cfg.oemName ?? cfg.carName
     }
 
-    if (cfg.naviScreenEnabled) {
+    if (cfg.naviScreen?.enabled) {
       body.naviScreenInfo = {
         width: cfg.width,
         height: cfg.height,

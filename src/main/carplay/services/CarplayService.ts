@@ -875,6 +875,13 @@ export class CarplayService {
       this.lastDongleInfoEmitKey = ''
       this.lastVideoWidth = undefined
       this.lastVideoHeight = undefined
+      this.lastNaviVideoWidth = undefined
+      this.lastNaviVideoHeight = undefined
+
+      if (this.naviVideoActive) {
+        this.naviVideoActive = false
+        this.onNaviVideoStop?.()
+      }
     })().finally(() => {
       this.stopping = false
       this.isStopping = false

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
-  Switch,
   FormControlLabel,
   Checkbox,
   Button,
