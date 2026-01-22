@@ -4,6 +4,10 @@ import { ExtraConfig } from '@main/Globals'
 export const getValueByPath = (obj: any, path: string) => {
   if (!obj || !path) return undefined
 
+  // Check for flat key first (state uses 'naviScreen.enabled' as literal keys)
+  if (path in obj) return obj[path]
+
+  // Fall back to nested traversal for actual nested objects
   return path.split('.').reduce((acc, key) => {
     if (acc == null) return undefined
     return acc[key]

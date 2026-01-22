@@ -47,7 +47,9 @@ export function useSmartSettings<T extends Record<string, any>>(
 
     for (const key of requiresRestartParams) {
       if (!isRestartRelevantPath(key)) continue
-      if (cfg[key] !== baseline[key]) return true
+      const cfgVal = getValueByPath(cfg, key)
+      const baseVal = getValueByPath(baseline, key)
+      if (cfgVal !== baseVal) return true
     }
     return false
   }, [settings, restartBaseline])
