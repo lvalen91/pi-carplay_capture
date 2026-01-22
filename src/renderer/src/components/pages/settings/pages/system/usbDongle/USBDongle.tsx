@@ -36,9 +36,17 @@ export function USBDongle() {
   const dongleFwVersion = useCarplayStore((s) => s.dongleFwVersion)
   const boxInfoRaw = useCarplayStore((s) => s.boxInfo)
 
-  // Video stream (negotiated)
+  // Settings (configured values)
+  const settings = useCarplayStore((s) => s.settings)
+
+  // Video stream (negotiated/received)
   const negotiatedWidth = useCarplayStore((s) => s.negotiatedWidth)
   const negotiatedHeight = useCarplayStore((s) => s.negotiatedHeight)
+  const negotiatedFps = useCarplayStore((s) => s.negotiatedFps)
+
+  // Navigation video (received)
+  const naviVideoWidth = useCarplayStore((s) => s.naviVideoWidth)
+  const naviVideoHeight = useCarplayStore((s) => s.naviVideoHeight)
 
   // Audio stream
   const audioCodec = useCarplayStore((s) => s.audioCodec)
@@ -58,8 +66,37 @@ export function USBDongle() {
     [boxInfo]
   )
 
-  const resolution =
-    negotiatedWidth && negotiatedHeight ? `${negotiatedWidth}×${negotiatedHeight}` : '—'
+  // Main video: configured vs received
+  const mainConfigured = useMemo(() => {
+    if (!settings) return '—'
+    const w = settings.width || 800
+    const h = settings.height || 480
+    const fps = settings.fps || 60
+    return `${w}×${h} @ ${fps}fps`
+  }, [settings])
+
+  const mainReceived = useMemo(() => {
+    if (!negotiatedWidth || !negotiatedHeight) return '—'
+    const res = `${negotiatedWidth}×${negotiatedHeight}`
+    if (negotiatedFps) return `${res} @ ${negotiatedFps}fps`
+    return res
+  }, [negotiatedWidth, negotiatedHeight, negotiatedFps])
+
+  // Navigation video: configured vs received
+  const naviConfigured = useMemo(() => {
+    if (!settings?.naviScreen?.enabled) return 'Disabled'
+    const ns = settings.naviScreen
+    const w = ns.width || 480
+    const h = ns.height || 272
+    const fps = ns.fps || 30
+    return `${w}×${h} @ ${fps}fps`
+  }, [settings])
+
+  const naviReceived = useMemo(() => {
+    if (!settings?.naviScreen?.enabled) return '—'
+    if (!naviVideoWidth || !naviVideoHeight) return 'Waiting…'
+    return `${naviVideoWidth}×${naviVideoHeight}`
+  }, [settings, naviVideoWidth, naviVideoHeight])
 
   const audioLine = useMemo(() => {
     const parts: string[] = []
@@ -690,10 +727,13 @@ export function USBDongle() {
 
   const rowsStreams = useMemo<Row[]>(
     () => [
-      { label: 'Resolution', value: resolution, mono: true },
+      { label: 'Main Video (Config)', value: mainConfigured, mono: true },
+      { label: 'Main Video (Received)', value: mainReceived, mono: true },
+      { label: 'Navi Video (Config)', value: naviConfigured, mono: true },
+      { label: 'Navi Video (Received)', value: naviReceived, mono: true },
       { label: 'Audio', value: audioLine, mono: true }
     ],
-    [resolution, audioLine]
+    [mainConfigured, mainReceived, naviConfigured, naviReceived, audioLine]
   )
 
   const renderRows = (rows: Row[]) => (

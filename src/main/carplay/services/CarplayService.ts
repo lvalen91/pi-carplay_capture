@@ -3,6 +3,7 @@ import { WebUSBDevice } from 'usb'
 import {
   Plugged,
   Unplugged,
+  Opened,
   VideoData,
   NaviVideoData,
   AudioData,
@@ -89,6 +90,7 @@ export class CarplayService {
   private firstFrameLogged = false
   private lastVideoWidth?: number
   private lastVideoHeight?: number
+  private lastVideoFps?: number
   private lastNaviVideoWidth?: number
   private lastNaviVideoHeight?: number
   private naviVideoActive = false
@@ -195,6 +197,21 @@ export class CarplayService {
             // ignore
           }
         }
+      } else if (msg instanceof Opened) {
+        // Opened message contains negotiated video settings from adapter
+        const w = msg.width
+        const h = msg.height
+        const fps = msg.fps
+        console.log(`[CarplayService] Opened: ${w}x${h} @ ${fps}fps`)
+        if (w > 0 && h > 0 && fps > 0) {
+          this.lastVideoWidth = w
+          this.lastVideoHeight = h
+          this.lastVideoFps = fps
+          this.webContents.send('carplay-event', {
+            type: 'resolution',
+            payload: { width: w, height: h, fps }
+          })
+        }
       } else if (msg instanceof VideoData) {
         if (!this.firstFrameLogged) {
           this.firstFrameLogged = true
@@ -209,7 +226,7 @@ export class CarplayService {
 
           this.webContents.send('carplay-event', {
             type: 'resolution',
-            payload: { width: w, height: h }
+            payload: { width: w, height: h, fps: this.lastVideoFps }
           })
         }
 
@@ -875,6 +892,7 @@ export class CarplayService {
       this.lastDongleInfoEmitKey = ''
       this.lastVideoWidth = undefined
       this.lastVideoHeight = undefined
+      this.lastVideoFps = undefined
       this.lastNaviVideoWidth = undefined
       this.lastNaviVideoHeight = undefined
 

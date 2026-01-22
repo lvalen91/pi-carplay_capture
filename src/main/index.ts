@@ -1205,6 +1205,12 @@ function saveSettings(next: Partial<ExtraConfig>) {
       ...DEFAULT_BINDINGS,
       ...(config.bindings ?? {}),
       ...(next.bindings ?? {})
+    },
+    // Deep merge naviScreen to preserve all properties
+    naviScreen: {
+      ...DEFAULT_CONFIG.naviScreen,
+      ...(config.naviScreen ?? {}),
+      ...((next as any).naviScreen ?? {})
     }
   } as ExtraConfig
 
@@ -1228,10 +1234,13 @@ function saveSettings(next: Partial<ExtraConfig>) {
   if (!mainWindow) return
 
   const sizeChanged = !sizesEqual(prev, config)
-  const kioskChanged = prev.kiosk !== config.kiosk
+  // Ensure boolean comparison to avoid type coercion issues
+  const prevKiosk = !!prev.kiosk
+  const currKiosk = !!config.kiosk
+  const kioskChanged = prevKiosk !== currKiosk
 
   if (process.platform === 'darwin') {
-    const wantFs = !!config.kiosk
+    const wantFs = currKiosk
     const isFs = mainWindow.isFullScreen()
 
     if (kioskChanged) {
@@ -1258,9 +1267,9 @@ function saveSettings(next: Partial<ExtraConfig>) {
   } else {
     // Linux
     if (kioskChanged) {
-      mainWindow.setKiosk(!!config.kiosk)
+      mainWindow.setKiosk(currKiosk)
       if (sizeChanged) {
-        if (config.kiosk) {
+        if (currKiosk) {
           applyAspectRatioWindowed(mainWindow, 0, 0)
         } else {
           mainWindow.setContentSize(config.width, config.height, false)
@@ -1268,7 +1277,7 @@ function saveSettings(next: Partial<ExtraConfig>) {
         }
       }
     } else if (sizeChanged) {
-      if (config.kiosk) {
+      if (currKiosk) {
         applyAspectRatioWindowed(mainWindow, 0, 0)
       } else {
         mainWindow.setContentSize(config.width, config.height, false)

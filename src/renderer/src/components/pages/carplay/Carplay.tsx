@@ -665,11 +665,12 @@ const CarplayComponent: React.FC<CarplayProps> = ({
       const t = typeof d.type === 'string' ? d.type : undefined
       switch (t) {
         case 'resolution': {
-          const payload = d.payload as { width?: number; height?: number } | undefined
+          const payload = d.payload as { width?: number; height?: number; fps?: number } | undefined
           if (payload && typeof payload.width === 'number' && typeof payload.height === 'number') {
             useCarplayStore.setState({
               negotiatedWidth: payload.width,
-              negotiatedHeight: payload.height
+              negotiatedHeight: payload.height,
+              negotiatedFps: typeof payload.fps === 'number' ? payload.fps : null
             })
             useStatusStore.setState({ isStreaming: true })
             setReceivingVideo(true)
@@ -679,6 +680,16 @@ const CarplayComponent: React.FC<CarplayProps> = ({
                 navigate('/', { replace: true })
               }
             }
+          }
+          break
+        }
+        case 'navi-resolution': {
+          const payload = d.payload as { width?: number; height?: number } | undefined
+          if (payload && typeof payload.width === 'number' && typeof payload.height === 'number') {
+            useCarplayStore.setState({
+              naviVideoWidth: payload.width,
+              naviVideoHeight: payload.height
+            })
           }
           break
         }

@@ -2,6 +2,33 @@ import { DongleConfig } from '../driver/DongleDriver.js'
 import { MessageType, MessageHeader, CommandMapping, CommandValue } from './common.js'
 import { clamp, getCurrentTimeInMs } from './utils.js'
 
+/**
+ * Android Auto only supports 3 fixed video resolutions.
+ * The phone renders UI at one of these resolutions, scaling elements
+ * so that when the video is stretched to fill the actual display,
+ * everything appears correctly proportioned.
+ */
+export type AndroidAutoResolution = { width: 800; height: 480 } | { width: 1280; height: 720 } | { width: 1920; height: 1080 }
+
+/**
+ * Maps display dimensions to the closest supported Android Auto resolution.
+ * Android Auto only supports: 800x480, 1280x720, 1920x1080
+ *
+ * The selection logic matches carlink_native's algorithm:
+ * - If display can fit 1920x1080 → use 1920x1080
+ * - Else if display can fit 1280x720 → use 1280x720
+ * - Else → fall back to 800x480
+ */
+export function getAndroidAutoResolution(displayWidth: number, displayHeight: number): AndroidAutoResolution {
+  if (displayWidth >= 1920 && displayHeight >= 1080) {
+    return { width: 1920, height: 1080 }
+  }
+  if (displayWidth >= 1280 && displayHeight >= 720) {
+    return { width: 1280, height: 720 }
+  }
+  return { width: 800, height: 480 }
+}
+
 export abstract class SendableMessage {
   abstract type: MessageType
 
@@ -298,11 +325,16 @@ export class SendBoxSettings extends SendableMessageWithPayload {
         ? 36
         : 1
 
+    // Map display dimensions to supported Android Auto resolution
+    // AA only supports: 800x480, 1280x720, 1920x1080
+    // The phone renders at this resolution, then video is stretched to display size
+    const aaResolution = getAndroidAutoResolution(cfg.width, cfg.height)
+
     const body: BoxSettingsBody = {
       mediaDelay: cfg.mediaDelay,
       syncTime: this.syncTime ?? getCurrentTimeInMs(),
-      androidAutoSizeW: cfg.width,
-      androidAutoSizeH: cfg.height,
+      androidAutoSizeW: aaResolution.width,
+      androidAutoSizeH: aaResolution.height,
       wifiChannel: channel,
       mediaSound: cfg.mediaSound,
       callQuality: cfg.callQuality,
@@ -316,9 +348,9 @@ export class SendBoxSettings extends SendableMessageWithPayload {
 
     if (cfg.naviScreen?.enabled) {
       body.naviScreenInfo = {
-        width: cfg.width,
-        height: cfg.height,
-        fps: cfg.fps
+        width: cfg.naviScreen.width,
+        height: cfg.naviScreen.height,
+        fps: cfg.naviScreen.fps
       }
     }
 

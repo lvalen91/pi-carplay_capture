@@ -156,4 +156,26 @@ export class WebGPURenderer implements FrameRenderer {
     this.#device.queue.submit([commandEncoder.finish()])
     frame.close()
   }
+
+  clear(): void {
+    if (!this.#ctx || !this.#device) return
+    const commandEncoder = this.#device.createCommandEncoder()
+    const textureView = this.#ctx.getCurrentTexture().createView()
+
+    const renderPassDescriptor: GPURenderPassDescriptor = {
+      colorAttachments: [
+        {
+          view: textureView,
+          clearValue: [0.0, 0.0, 0.0, 1.0],
+          loadOp: 'clear',
+          storeOp: 'store'
+        }
+      ]
+    }
+
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor)
+    passEncoder.end()
+
+    this.#device.queue.submit([commandEncoder.finish()])
+  }
 }

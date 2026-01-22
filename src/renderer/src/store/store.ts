@@ -51,9 +51,15 @@ export interface CarplayStore {
   restartBaseline: ExtraConfig | null
   markRestartBaseline: () => void
 
-  // Display resolution
+  // Display resolution (main video)
   negotiatedWidth: number | null
   negotiatedHeight: number | null
+  negotiatedFps: number | null
+
+  // Navigation video resolution (received from adapter)
+  naviVideoWidth: number | null
+  naviVideoHeight: number | null
+  setNaviVideoResolution: (width: number, height: number) => void
 
   // USB descriptor
   vendorId: number | null
@@ -150,6 +156,9 @@ export const useCarplayStore = create<CarplayStore>((set, get) => ({
     set({
       negotiatedWidth: null,
       negotiatedHeight: null,
+      negotiatedFps: null,
+      naviVideoWidth: null,
+      naviVideoHeight: null,
 
       vendorId: null,
       productId: null,
@@ -164,6 +173,12 @@ export const useCarplayStore = create<CarplayStore>((set, get) => ({
 
   negotiatedWidth: null,
   negotiatedHeight: null,
+  negotiatedFps: null,
+
+  naviVideoWidth: null,
+  naviVideoHeight: null,
+  setNaviVideoResolution: (width, height) =>
+    set({ naviVideoWidth: width, naviVideoHeight: height }),
 
   vendorId: null,
   productId: null,
